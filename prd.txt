@@ -1,0 +1,280 @@
+📄 PRD — Real-Time Lab Tracking System (Next.js + MongoDB Edition)
+
+Version: 2.1 (Stack-Specific)
+Stack: Next.js 14 (App Router) + MongoDB + Redis
+Architecture Style: Modular monolith (upgradeable to microservices)
+
+1. 🎯 System Goal
+
+Build a real-time lab tracking + dynamic ETA prediction system that:
+
+Uses barcode ingestion
+Integrates with SAP asynchronously
+Calculates dynamic ETA (queue-aware)
+Supports real-time updates (Zomato-style)
+Handles batch scheduling + failures
+Runs inside Next.js fullstack architecture
+2. 🧠 Architecture Decision (IMPORTANT)
+
+Since you're using Next.js:
+
+👉 You are NOT building microservices initially
+👉 You are building a modular monolith with clear boundaries
+
+🏗️ Final Architecture
+Next.js App
+│
+├── app/                → frontend (dashboard, scanner UI)
+├── app/api/            → backend routes (Node runtime)
+│
+├── lib/
+│   ├── db/             → MongoDB connection
+│   ├── redis/          → Redis client
+│   ├── events/         → event bus abstraction
+│   ├── tat-engine/     → ETA logic
+│   ├── scheduler/      → batch + delayed jobs
+│   ├── sap/            → SAP integration
+│
+├── workers/            → background jobs (Node worker)
+│
+└── websocket-server/   → WS server (separate process)
+3. 🗄️ Database Design (MongoDB Optimized)
+
+MongoDB is document-based, so we design for:
+
+fast reads (dashboard)
+append-heavy writes (events)
+denormalized structures
+📦 Collection: samples
+{
+  _id: ObjectId,
+  sampleId: "SAP123",
+  testCode: "CBC",
+  labLocation: "Mumbai",
+
+  status: "QUEUED", 
+  sapStatus: "PENDING",
+
+  scannedAt: ISODate,
+  batchId: ObjectId,
+
+  eta: ISODate,
+  queueDelay: Number,
+
+  missedCount: Number,
+  priority: "NORMAL",
+
+  version: Number,   // for concurrency
+
+  createdAt,
+  updatedAt
+}
+📦 Collection: batches
+{
+  _id: ObjectId,
+  testCode: "CBC",
+  labLocation: "Mumbai",
+
+  cutoffTime: ISODate,
+  startTime: ISODate,
+
+  capacity: 100,
+  currentLoad: 60,
+
+  status: "OPEN"
+}
+📦 Collection: events (VERY IMPORTANT)
+{
+  _id: ObjectId,
+  sampleId,
+  type: "ETA_UPDATED",
+  payload: {},
+  timestamp: ISODate
+}
+
+👉 This enables:
+
+audit logs
+debugging
+replay
+📦 Collection: notifications
+{
+  sampleId,
+  type,
+  channel,
+  status,
+  sentAt
+}
+4. 📡 Real-Time System (Next.js Compatible)
+❗ Problem:
+
+Next.js API routes are stateless → not good for WebSockets
+
+✅ Solution:
+
+👉 Run separate WebSocket server
+
+Next.js API → Redis Pub/Sub → WebSocket Server → Clients
+Flow:
+API updates sample
+Publishes event to Redis:
+channel: "lab_updates"
+WebSocket server listens → pushes to frontend
+Fallback:
+/api/samples/live polling every 10 sec
+5. 🔄 Core Modules (Updated for Your Stack)
+Module A — Barcode Ingestion API
+Endpoint
+POST /api/sample/ingest
+Flow
+1. Validate barcode
+2. Check idempotency (scan_id)
+3. Insert sample (Mongo)
+4. Emit event
+5. Trigger async SAP job
+6. Return ETA
+Idempotency (CRITICAL)
+
+Store:
+
+scanId
+
+If exists → ignore duplicate
+
+Module B — SAP Integration (Async Worker)
+Implementation
+Use BullMQ (Redis queue)
+Flow
+Scan → queue job → worker calls SAP
+Retry Strategy
+exponential backoff
+max retries
+fallback to EDOS
+Module C — EDOS Rules Engine
+Storage
+Load Excel → JSON
+Store in:
+memory (fast)
+Redis (shared)
+Add this field (IMPORTANT):
+labCapacity: number
+Module D — TAT Engine (Node Module)
+Function
+computeETA(sample, batch, load, capacity)
+Formula
+queueDelay = currentLoad / capacity
+
+ETA = batch.startTime 
+    + queueDelay 
+    + tat_hours
+Trigger Points
+new sample
+batch change
+processing complete
+Module E — Batch Scheduler (BullMQ)
+Instead of polling:
+
+Use:
+
+queue.add(job, { delay: cutoffTime - now })
+On execution:
+lock batch
+mark late samples
+trigger reassignment
+Module F — Background Workers
+
+Create /workers/index.js
+
+Handles:
+
+SAP jobs
+batch scheduling
+notifications
+ETA recomputation
+Module G — Dashboard (Next.js)
+Pages
+1. Live View
+all samples
+sorted by ETA
+2. Batch View
+capacity vs load
+countdown timer
+3. Exceptions
+missed
+breached
+4. Scanner UI
+instant feedback
+mobile-friendly
+6. 🔁 Concurrency Control (MongoDB)
+Problem:
+
+Multiple updates → race condition
+
+Solution:
+
+Use optimistic locking
+
+version: Number
+
+Update query:
+
+update where version = currentVersion
+
+If fails → retry
+
+7. ⚡ Performance Strategy
+MongoDB Indexes
+sampleId (unique)
+status
+eta
+batchId
+Redis Usage
+ETA cache
+pub/sub
+job queue
+Avoid:
+
+❌ heavy joins
+❌ large documents
+
+8. 🚨 Failure Handling
+MUST HANDLE
+MongoDB down
+queue writes in Redis
+Redis down
+fallback to DB polling
+Worker crash
+BullMQ retries jobs
+WebSocket down
+fallback polling
+9. 📊 Observability
+Add:
+Metrics
+ETA deviation
+queue backlog
+batch utilization
+Logs
+all state transitions
+SAP failures
+10. 🧪 Demo Flow
+Scan barcode
+ETA appears instantly
+Dashboard updates live
+Simulate overload → ETA increases
+Simulate missed batch → auto reassignment
+SAP failure → fallback
+11. 🛠️ Tech Stack (Final)
+Layer	Tech
+Fullstack	Next.js 14
+DB	MongoDB
+Cache	Redis
+Queue	BullMQ
+WS	Socket.IO (separate server)
+Workers	Node.js
+12. 🧠 Final Architecture Insight
+
+You are building:
+
+👉 Real-time scheduling + prediction engine
+
+NOT just CRUD app.
