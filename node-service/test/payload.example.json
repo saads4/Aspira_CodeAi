@@ -1,0 +1,69 @@
+{
+  "single_sample": {
+    "sample_id": "SAP-2026-00142",
+    "test_id": "TID-001",
+    "received_at": "2026-03-27T14:30:00+05:30",
+    "test_name": "test_1",
+    "test_code": "ELISA023",
+    "method": "EIA",
+    "specimen_type": "Serum",
+    "agreed_tat_hours": 24,
+    "priority_tat": "NORMAL",
+    "batch_windows": null
+  },
+  "multi_test_payload": {
+    "tests": [
+      {
+        "sample_id": "SAP-2026-00143",
+        "test_id": "TID-002",
+        "received_at": "2026-03-27T19:00:00+05:30",
+        "test_name": "test_13",
+        "test_code": "HAEM-O-043",
+        "method": "Automated Cell  Counter & Microscopy",
+        "specimen_type": "3 ml EDTA Whole Blood",
+        "agreed_tat_hours": 8,
+        "priority_tat": "HIGH"
+      },
+      {
+        "sample_id": "SAP-2026-00144",
+        "test_id": "TID-003",
+        "received_at": "2026-03-27T19:00:00+05:30",
+        "test_name": "test_50",
+        "test_code": "ELISA032",
+        "method": "ELISA",
+        "specimen_type": "2 ml Serum",
+        "agreed_tat_hours": 6,
+        "priority_tat": "NORMAL"
+      }
+    ]
+  },
+  "missed_batch_scenario": {
+    "sample_id": "SAP-2026-00145",
+    "test_id": "TID-004",
+    "received_at": "2026-03-27T21:00:00+05:30",
+    "test_name": "test_1",
+    "test_code": "ELISA023",
+    "method": "EIA",
+    "specimen_type": "Serum",
+    "agreed_tat_hours": 12,
+    "priority_tat": "HIGH",
+    "batch_windows": null
+  },
+  "sla_breach_scenario": {
+    "sample_id": "SAP-2026-00146",
+    "test_id": "TID-005",
+    "received_at": "2026-03-27T17:00:00+05:30",
+    "test_name": "test_6",
+    "test_code": "MOLBI167",
+    "method": "PCR",
+    "specimen_type": "3 ml Serum / 20 ml Urine",
+    "agreed_tat_hours": 4,
+    "priority_tat": "NORMAL"
+  },
+  "_notes": {
+    "single_sample": "Normal scenario — test_1 (ELISA023) has Tue/Fri 6pm cutoff, Next Day 8pm TAT",
+    "multi_test_payload": "Send multiple tests in one request — uses tests[] array",
+    "missed_batch_scenario": "Received at 9pm, cutoff was 6pm — triggers MISSED BATCH alert",
+    "sla_breach_scenario": "test_6 has 3rd day 5pm TAT but agreed_tat_hours=4 — triggers SLA BREACH"
+  }
+}

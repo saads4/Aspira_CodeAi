@@ -1,0 +1,135 @@
+// ─── Alert Service ──────────────────────────────────────────────
+// Console (colour) + optional email alerts for:
+//   1. MISSED BATCH  (high priority)
+//   2. SLA BREACH
+//   3. DELAY ESCALATION
+// ────────────────────────────────────────────────────────────────
+const nodemailer = require('nodemailer');
+const { DateTime } = require('luxon');
+const { ZONE } = require('../utils/timezone');
+const config = require('../config/env');
+const logger = require('../utils/logger');
+
+// ── Email transporter (lazy init) ───────────────────────────
+let transporter = null;
+
+function getTransporter() {
+  if (transporter) return transporter;
+  if (!config.SMTP_HOST || !config.SMTP_USER) return null;
+
+  transporter = nodemailer.createTransport({
+    host: config.SMTP_HOST,
+    port: config.SMTP_PORT,
+    secure: config.SMTP_PORT === 465,
+    auth: {
+      user: config.SMTP_USER,
+      pass: config.SMTP_PASS,
+    },
+  });
+  return transporter;
+}
+
+function fmt(d) {
+  if (!d) return 'N/A';
+  return DateTime.fromJSDate(new Date(d), { zone: ZONE }).toFormat('dd-MMM-yyyy hh:mm a');
+}
+
+// ── Build alert data object ─────────────────────────────────
+function buildAlertData(sample, result) {
+  return {
+    sample_id:          sample.sample_id,
+    test_name:          sample.test_name,
+    priority:           sample.priority_tat || 'NORMAL',
+    received_at:        fmt(sample.received_at),
+    batch_id:           result.batch_id,
+    batch_run_start:    fmt(result.batch_run_start),
+    eta:                fmt(result.eta),
+    sla_deadline:       fmt(result.sla_deadline),
+    overage_minutes:    result.overage_minutes,
+    reason:             result.delay_reason || 'ETA exceeds SLA deadline',
+    recommended_action: '',
+  };
+}
+
+// ── Send email ──────────────────────────────────────────────
+async function sendEmail(subject, body) {
+  const smtp = getTransporter();
+  if (!smtp || !config.ALERT_EMAIL_TO) return;
+
+  try {
+    await smtp.sendMail({
+      from: config.ALERT_EMAIL_FROM,
+      to: config.ALERT_EMAIL_TO,
+      subject,
+      text: body,
+    });
+    logger.info(`Alert email sent: ${subject}`);
+  } catch (err) {
+    logger.warn(`Email send failed: ${err.message}`);
+  }
+}
+
+function alertToText(type, data) {
+  return [
+    `=== ${type} ===`,
+    `Sample ID    : ${data.sample_id}`,
+    `Test Name    : ${data.test_name}`,
+    `Priority     : ${data.priority}`,
+    `Received At  : ${data.received_at}`,
+    `Batch        : ${data.batch_id}`,
+    `Batch Run    : ${data.batch_run_start}`,
+    `ETA          : ${data.eta}`,
+    `SLA Deadline : ${data.sla_deadline}`,
+    `Overage      : ${data.overage_minutes} min`,
+    `Reason       : ${data.reason}`,
+    `Action       : ${data.recommended_action}`,
+    '='.repeat(40),
+  ].join('\n');
+}
+
+// ── Public API ──────────────────────────────────────────────
+
+async function alertMissedBatch(sample, result) {
+  const data = buildAlertData(sample, result);
+  data.recommended_action = 'Reassign to next available batch immediately. Escalate if repeated.';
+
+  // Console
+  logger.missedBatch(data);
+
+  // Email
+  await sendEmail(
+    `🚨 MISSED BATCH — ${sample.sample_id} (${sample.test_name})`,
+    alertToText('MISSED BATCH', data)
+  );
+}
+
+async function alertSLABreach(sample, result) {
+  const data = buildAlertData(sample, result);
+  data.reason = 'ETA exceeds SLA deadline';
+  data.recommended_action = 'Review batch capacity. Consider priority re-routing or expedited processing.';
+
+  // Console
+  logger.slaBreach(data);
+
+  // Email
+  await sendEmail(
+    `⚠️ SLA BREACH — ${sample.sample_id} (${sample.test_name})`,
+    alertToText('SLA BREACH', data)
+  );
+}
+
+async function alertDelayEscalation(sample, result) {
+  const data = buildAlertData(sample, result);
+  data.recommended_action = 'Alert lab supervisor. Initiate contingency processing.';
+
+  // Console
+  logger.delayEscalation(data);
+
+  // Email
+  await sendEmail(
+    `🟠 DELAY ESCALATION — ${sample.sample_id} (${sample.test_name})`,
+    alertToText('DELAY ESCALATION', data)
+  );
+}
+
+module.exports = { alertMissedBatch, alertSLABreach, alertDelayEscalation };
