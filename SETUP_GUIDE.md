@@ -43,17 +43,7 @@ MongoDB Atlas is the cloud-hosted version of MongoDB. Follow these steps to set 
 
 The system uses Redis for its queue (BullMQ) and transient caching.
 
-### Option A: Local Installation (Recommended for Windows via Docker)
-If you have Docker installed, run:
-```bash
-docker run -d --name redis -p 6379:6379 redis:7-alpine
-```
-
-### Option B: Redis on Windows (without Docker)
-1.  Download the latest `.msi` or `.zip` from the [tporadowski/redis](https://github.com/tporadowski/redis/releases) GitHub repository.
-2.  Install and run the service.
-
-### Option C: Redis Cloud (Free)
+### Redis Cloud (Free)
 1.  Sign up at [Redis.io](https://redis.io/cloud/).
 2.  Create a free subscription.
 3.  Copy the Redis URL (e.g., `redis://default:TOKEN@redis-12345.c1.us-east-1-2.ec2.cloud.redislabs.com:12345`).
