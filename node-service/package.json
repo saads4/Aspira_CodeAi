@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "worker": "node src/worker.js",
     "dev": "concurrently \"node src/index.js\" \"node src/worker.js\"",
-    "parse-edos": "node src/scripts/parseEdos.js"
+    "parse-edos": "node src/scripts/parseEdos.js",
+    "test": "node test/test-clean.js"
   },
   "dependencies": {
     "bullmq": "^5.1.0",

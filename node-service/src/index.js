@@ -1,6 +1,7 @@
 // ─── Express Server Entry Point ─────────────────────────────────
 const express = require('express');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const { connectDB } = require('./config/db');
 const { getRedisConnection } = require('./config/redis');
 const { loadEdos } = require('./services/edosLoader');
@@ -9,10 +10,11 @@ const logger = require('./utils/logger');
 const { PORT } = require('./config/env');
 
 // Routes
-const webhookRouter = require('./routes/webhook');
-const samplesRouter = require('./routes/samples');
-const statsRouter = require('./routes/stats');
-const batchesRouter = require('./routes/batches');
+const webhookRouter  = require('./routes/webhook');
+const samplesRouter  = require('./routes/samples');
+const statsRouter    = require('./routes/stats');
+const batchesRouter  = require('./routes/batches');
+const alertsRouter   = require('./routes/alerts');
 
 const app = express();
 
@@ -27,10 +29,11 @@ app.get('/health', (req, res) => {
 });
 
 // ── Routes ──────────────────────────────────────────────────
-app.use('/webhook', webhookRouter);
-app.use('/api/samples', samplesRouter);
-app.use('/api/stats', statsRouter);
-app.use('/api/batches', batchesRouter);
+app.use('/webhook',      webhookRouter);
+app.use('/api/samples',  samplesRouter);
+app.use('/api/stats',    statsRouter);
+app.use('/api/batches',  batchesRouter);
+app.use('/api/alerts',   alertsRouter);
 
 // ── 404 handler ─────────────────────────────────────────────
 app.use((req, res) => {
@@ -41,6 +44,8 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ── Startup ─────────────────────────────────────────────────
+let server = null;
+
 async function start() {
   // 1. Connect MongoDB
   await connectDB();
@@ -50,7 +55,7 @@ async function start() {
   await loadEdos(redis);
 
   // 3. Start Express
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     logger.success(`🚀 TAT Monitor API running on http://localhost:${PORT}`);
     logger.info('Routes:');
     logger.info('  POST /webhook          — SAP sample intake');
@@ -58,9 +63,35 @@ async function start() {
     logger.info('  GET  /api/samples/:id  — sample detail');
     logger.info('  GET  /api/stats        — dashboard stats');
     logger.info('  GET  /api/batches      — batch queues');
+    logger.info('  GET  /api/alerts       — recent alerts');
     logger.info('  GET  /health           — health check');
   });
 }
+
+// ── Graceful Shutdown ───────────────────────────────────────
+async function shutdown(signal) {
+  logger.warn(`${signal} received — shutting down gracefully...`);
+
+  if (server) {
+    server.close(() => logger.info('HTTP server closed'));
+  }
+
+  try {
+    const redis = getRedisConnection();
+    await redis.quit();
+    logger.info('Redis connection closed');
+  } catch (_) { /* best effort */ }
+
+  try {
+    await mongoose.disconnect();
+    logger.info('MongoDB disconnected');
+  } catch (_) { /* best effort */ }
+
+  process.exit(0);
+}
+
+process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 start().catch((err) => {
   logger.error(`Server startup failed: ${err.message}`);

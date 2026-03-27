@@ -1,14 +1,16 @@
 // ─── Alert Service ──────────────────────────────────────────────
-// Console (colour) + optional email alerts for:
-//   1. MISSED BATCH  (high priority)
-//   2. SLA BREACH
-//   3. DELAY ESCALATION
+// Console (colour) + optional email alerts + MongoDB persistence.
+// Alert types:
+//   1. MISSED_BATCH   (high priority)
+//   2. SLA_BREACH
+//   3. DELAY_ESCALATION
 // ────────────────────────────────────────────────────────────────
 const nodemailer = require('nodemailer');
 const { DateTime } = require('luxon');
 const { ZONE } = require('../utils/timezone');
 const config = require('../config/env');
 const logger = require('../utils/logger');
+const Alert = require('../models/Alert');
 
 // ── Email transporter (lazy init) ───────────────────────────
 let transporter = null;
@@ -69,6 +71,21 @@ async function sendEmail(subject, body) {
   }
 }
 
+// ── Persist alert to MongoDB ────────────────────────────────
+async function saveAlert(type, sample, data) {
+  try {
+    await Alert.create({
+      type,
+      sample_id:  sample.sample_id,
+      test_name:  sample.test_name,
+      priority:   sample.priority_tat || 'NORMAL',
+      alert_data: data,
+    });
+  } catch (err) {
+    logger.warn(`Failed to persist alert: ${err.message}`);
+  }
+}
+
 function alertToText(type, data) {
   return [
     `=== ${type} ===`,
@@ -96,6 +113,9 @@ async function alertMissedBatch(sample, result) {
   // Console
   logger.missedBatch(data);
 
+  // Persist to DB
+  await saveAlert('MISSED_BATCH', sample, data);
+
   // Email
   await sendEmail(
     `🚨 MISSED BATCH — ${sample.sample_id} (${sample.test_name})`,
@@ -111,6 +131,9 @@ async function alertSLABreach(sample, result) {
   // Console
   logger.slaBreach(data);
 
+  // Persist to DB
+  await saveAlert('SLA_BREACH', sample, data);
+
   // Email
   await sendEmail(
     `⚠️ SLA BREACH — ${sample.sample_id} (${sample.test_name})`,
@@ -124,6 +147,9 @@ async function alertDelayEscalation(sample, result) {
 
   // Console
   logger.delayEscalation(data);
+
+  // Persist to DB
+  await saveAlert('DELAY_ESCALATION', sample, data);
 
   // Email
   await sendEmail(

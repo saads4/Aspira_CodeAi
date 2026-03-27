@@ -1,280 +1,139 @@
-📄 PRD — Real-Time Lab Tracking System (Next.js + MongoDB Edition)
+PRD — Automated TAT & Batch Monitoring System (Node.js + BullMQ Edition)
 
-Version: 2.1 (Stack-Specific)
-Stack: Next.js 14 (App Router) + MongoDB + Redis
-Architecture Style: Modular monolith (upgradeable to microservices)
+Version: 3.0 (Stack-Specific)
+Stack: Node.js (Express) + BullMQ (Redis) + MongoDB Atlas
+Architecture Style: Event-Driven Microservice (Modular Monolith)
 
-1. 🎯 System Goal
+1. System Goal
 
-Build a real-time lab tracking + dynamic ETA prediction system that:
+Build a fully automated, API-driven lab tracking system that:
+- Receives sample data via SAP Webhooks
+- Validates and normalizes multi-test payloads
+- Calculates dynamic ETA based on EDOS batch windows (Asia/Kolkata)
+- Predicts SLA breaches and calculates overage minutes
+- Handles "Missed Batch" scenarios as high-priority events
+- Fires real-time alerts (Console, Email, MongoDB Persistence)
+- Provides a comprehensive Dashboard API
 
-Uses barcode ingestion
-Integrates with SAP asynchronously
-Calculates dynamic ETA (queue-aware)
-Supports real-time updates (Zomato-style)
-Handles batch scheduling + failures
-Runs inside Next.js fullstack architecture
-2. 🧠 Architecture Decision (IMPORTANT)
+2. Architecture Design
 
-Since you're using Next.js:
+The system is split into two main logical processes (runable together or separately).
 
-👉 You are NOT building microservices initially
-👉 You are building a modular monolith with clear boundaries
-
-🏗️ Final Architecture
-Next.js App
+Backend: node-service/
 │
-├── app/                → frontend (dashboard, scanner UI)
-├── app/api/            → backend routes (Node runtime)
+├── entry-regulator/   → Express Application
+│   ├── POST /webhook  → Validates incoming SAP payload
+│   └── BullMQ/        → Pushes jobs to Redis (sample-processing queue)
 │
-├── lib/
-│   ├── db/             → MongoDB connection
-│   ├── redis/          → Redis client
-│   ├── events/         → event bus abstraction
-│   ├── tat-engine/     → ETA logic
-│   ├── scheduler/      → batch + delayed jobs
-│   ├── sap/            → SAP integration
+├── processing-engine/ → BullMQ Worker (Node runtime)
+│   ├── EDOS Loader    → Parses CSV/JSON test rules
+│   ├── Batch Assigner → Core logic (Batch, ETA, SLA, Breach)
+│   └── Alert Service  → Console, Email, and DB Alerting
 │
-├── workers/            → background jobs (Node worker)
+├── storage/           → MongoDB Atlas
+│   ├── Samples        → Permanent record of all calculated TATs
+│   └── Alerts         → Persistent log of all system alerts
 │
-└── websocket-server/   → WS server (separate process)
-3. 🗄️ Database Design (MongoDB Optimized)
+└── dashboard-api/     → REST Endpoints
+    ├── /api/samples   → List/Filter all samples
+    ├── /api/stats     → Aggregate metrics
+    ├── /api/batches   → Batch utilization view
+    └── /api/alerts    → Recent alerts + summary
 
-MongoDB is document-based, so we design for:
+3. Database Design (MongoDB Optimized)
 
-fast reads (dashboard)
-append-heavy writes (events)
-denormalized structures
-📦 Collection: samples
+Collection: samples
 {
   _id: ObjectId,
-  sampleId: "SAP123",
-  testCode: "CBC",
-  labLocation: "Mumbai",
-
-  status: "QUEUED", 
-  sapStatus: "PENDING",
-
-  scannedAt: ISODate,
-  batchId: ObjectId,
-
-  eta: ISODate,
-  queueDelay: Number,
-
-  missedCount: Number,
-  priority: "NORMAL",
-
-  version: Number,   // for concurrency
-
-  createdAt,
-  updatedAt
+  sample_id: "SAP-12345",   // External ID from SAP
+  test_id: "TID-001",
+  test_name: "test_1",
+  test_code: "ELISA023",
+  received_at: ISODate,     // Injected by SAP or Regulator
+  agreed_tat_hours: Number, // SLA requirement
+  
+  batch_id: String,         // Computed: BATCH-{CODE}-{DATE}-{TIME}
+  batch_run_start: ISODate,
+  batch_cutoff: ISODate,
+  
+  eta: ISODate,             // Computed ETA
+  sla_deadline: ISODate,    // Computed derived SLA
+  breach_flag: Boolean,     // True if ETA > SLA
+  overage_minutes: Number,  // Overage if breached
+  
+  missed_batch: Boolean,    // True if received after cutoff
+  delay_reason: String,     // Human-readable reason for delay
+  status: "assigned",       // pending, assigned, delayed, error
+  processed: Boolean,
+  
+  createdAt, updatedAt
 }
-📦 Collection: batches
+
+Collection: alerts
 {
   _id: ObjectId,
-  testCode: "CBC",
-  labLocation: "Mumbai",
-
-  cutoffTime: ISODate,
-  startTime: ISODate,
-
-  capacity: 100,
-  currentLoad: 60,
-
-  status: "OPEN"
-}
-📦 Collection: events (VERY IMPORTANT)
-{
-  _id: ObjectId,
-  sampleId,
-  type: "ETA_UPDATED",
-  payload: {},
-  timestamp: ISODate
+  type: "MISSED_BATCH",     // MISSED_BATCH, SLA_BREACH, DELAY_ESCALATION
+  sample_id, test_name,
+  priority,
+  alert_data: {},           // Full snapshot of timers at alert time
+  acknowledged: Boolean,
+  createdAt
 }
 
-👉 This enables:
+4. Event-Driven Flow (NO Polling)
 
-audit logs
-debugging
-replay
-📦 Collection: notifications
-{
-  sampleId,
-  type,
-  channel,
-  status,
-  sentAt
-}
-4. 📡 Real-Time System (Next.js Compatible)
-❗ Problem:
+Solution: BullMQ + Redis
+Entry Regulator receives sample → Enqueues job to "sample-processing"
+Worker listens to Redis → Picks up job immediately
+Result saved to MongoDB → Dashboard updates on next fetch
 
-Next.js API routes are stateless → not good for WebSockets
+5. Core Modules
 
-✅ Solution:
+Module A — Webhook Entry Regulator (src/routes/webhook.js)
+- Normalizes single or multi-test (`tests: []`) payloads.
+- Splits multi-tests into individual jobs.
+- Validates all fields: required (sample_id, test_name, received_at, tat_hours).
 
-👉 Run separate WebSocket server
+Module B — EDOS Loader (src/services/edosLoader.js)
+- Loads 1070+ test rules from CSV (or fallback `data/edos.json`).
+- Parses human-readable schedules ("Tue / Fri 6 pm").
+- Parses complex TAT rules ("Next Day 8 pm", "3rd Day 5 pm").
 
-Next.js API → Redis Pub/Sub → WebSocket Server → Clients
-Flow:
-API updates sample
-Publishes event to Redis:
-channel: "lab_updates"
-WebSocket server listens → pushes to frontend
-Fallback:
-/api/samples/live polling every 10 sec
-5. 🔄 Core Modules (Updated for Your Stack)
-Module A — Barcode Ingestion API
-Endpoint
-POST /api/sample/ingest
-Flow
-1. Validate barcode
-2. Check idempotency (scan_id)
-3. Insert sample (Mongo)
-4. Emit event
-5. Trigger async SAP job
-6. Return ETA
-Idempotency (CRITICAL)
+Module C — Batch Assigner (src/services/batchAssigner.js)
+- Core Logic: Converts ISO string → Asia/Kolkata (IST).
+- 30-Day Window Scan: Finds first available batch where `cutoff_time >= received_time`.
+- ETA Computation:
+  - If Deadline Hour: `batch_run_start + days @ hour`
+  - If Relative: `batch_run_start + tat_minutes`
 
-Store:
+Module D — Alert Service (src/services/alertService.js)
+- Persistent: Saves all alerts to MongoDB.
+- Visual: Colorized console boxes for terminal monitoring.
+- Email: SMTP-based plain-text summary (Sample, Priority, ETA, Reason, Action).
 
-scanId
+Module E — Dashboard API (src/routes/...)
+- Samples: Paginated, filterable listing.
+- Stats: Real-time counts of Breached vs Assigned.
+- Batches: Aggregated view of Sample Load per Batch.
+- Alerts: Recent failures and "Missed Batch" escalation.
 
-If exists → ignore duplicate
+6. Concurrency and Resilience
+- BullMQ Retries: Handles temporary failures (e.g. DB connection) with exponential backoff.
+- Graceful Shutdown: Processes finish cleanly (server/worker) on SIGINT/SIGTERM.
+- EDOS Fallback: System starts even if CSV is missing via JSON fallback.
 
-Module B — SAP Integration (Async Worker)
-Implementation
-Use BullMQ (Redis queue)
-Flow
-Scan → queue job → worker calls SAP
-Retry Strategy
-exponential backoff
-max retries
-fallback to EDOS
-Module C — EDOS Rules Engine
-Storage
-Load Excel → JSON
-Store in:
-memory (fast)
-Redis (shared)
-Add this field (IMPORTANT):
-labCapacity: number
-Module D — TAT Engine (Node Module)
-Function
-computeETA(sample, batch, load, capacity)
-Formula
-queueDelay = currentLoad / capacity
+7. Demo/Verification Flow
+1. Submit POST /webhook
+2. BullMQ job created immediately.
+3. Worker processes:
+   - "Missed Batch" alert triggers red console box if received after hours.
+   - "SLA Breach" alert triggers yellow console box if ETA > SLA.
+   - Sample saved/updated in MongoDB.
+4. Dashboard API returns latest computation result instantly.
 
-ETA = batch.startTime 
-    + queueDelay 
-    + tat_hours
-Trigger Points
-new sample
-batch change
-processing complete
-Module E — Batch Scheduler (BullMQ)
-Instead of polling:
-
-Use:
-
-queue.add(job, { delay: cutoffTime - now })
-On execution:
-lock batch
-mark late samples
-trigger reassignment
-Module F — Background Workers
-
-Create /workers/index.js
-
-Handles:
-
-SAP jobs
-batch scheduling
-notifications
-ETA recomputation
-Module G — Dashboard (Next.js)
-Pages
-1. Live View
-all samples
-sorted by ETA
-2. Batch View
-capacity vs load
-countdown timer
-3. Exceptions
-missed
-breached
-4. Scanner UI
-instant feedback
-mobile-friendly
-6. 🔁 Concurrency Control (MongoDB)
-Problem:
-
-Multiple updates → race condition
-
-Solution:
-
-Use optimistic locking
-
-version: Number
-
-Update query:
-
-update where version = currentVersion
-
-If fails → retry
-
-7. ⚡ Performance Strategy
-MongoDB Indexes
-sampleId (unique)
-status
-eta
-batchId
-Redis Usage
-ETA cache
-pub/sub
-job queue
-Avoid:
-
-❌ heavy joins
-❌ large documents
-
-8. 🚨 Failure Handling
-MUST HANDLE
-MongoDB down
-queue writes in Redis
-Redis down
-fallback to DB polling
-Worker crash
-BullMQ retries jobs
-WebSocket down
-fallback polling
-9. 📊 Observability
-Add:
-Metrics
-ETA deviation
-queue backlog
-batch utilization
-Logs
-all state transitions
-SAP failures
-10. 🧪 Demo Flow
-Scan barcode
-ETA appears instantly
-Dashboard updates live
-Simulate overload → ETA increases
-Simulate missed batch → auto reassignment
-SAP failure → fallback
-11. 🛠️ Tech Stack (Final)
-Layer	Tech
-Fullstack	Next.js 14
-DB	MongoDB
-Cache	Redis
-Queue	BullMQ
-WS	Socket.IO (separate server)
-Workers	Node.js
-12. 🧠 Final Architecture Insight
-
-You are building:
-
-👉 Real-time scheduling + prediction engine
-
-NOT just CRUD app.
+8. Architecture Insight
+You are building an Automated Scheduling & Prediction Engine.
+- Event-Driven (BullMQ)
+- Timezone Aware (Asia/Kolkata)
+- Resilient (Graceful Shutdown + EDOS Fallback)
+- Fully Persistent (MongoDB Alerts + Samples)

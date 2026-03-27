@@ -1,6 +1,10 @@
 // ─── EDOS Loader ────────────────────────────────────────────────
 // Reads the EDOS CSV, parses schedule + TAT fields, and provides
 // an in-memory lookup Map plus optional Redis cache.
+//
+// Fallback chain:
+//   1. CSV file  (python-service/config/Edos List.csv)
+//   2. JSON file (data/edos.json) — pre-generated
 // ────────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -19,18 +23,73 @@ const CSV_PATH = path.resolve(__dirname, '../../..', 'python-service', 'config',
 const JSON_PATH = path.resolve(__dirname, '../../data/edos.json');
 
 /**
+ * Populate the in-memory maps from an array of parsed records.
+ */
+function indexRecords(records) {
+  for (const record of records) {
+    if (record.test_name) {
+      edosMap.set(record.test_name.toLowerCase(), record);
+    }
+    if (record.test_code) {
+      edosCodeMap.set(record.test_code.toLowerCase(), record);
+    }
+  }
+}
+
+/**
  * Load EDOS data from CSV into memory.
+ * Falls back to edos.json if CSV is not available.
  * Optionally writes edos.json for inspection.
  * @param {import('ioredis').Redis} [redis] – optional, to cache in Redis hash
  */
 function loadEdos(redis) {
   return new Promise((resolve, reject) => {
+    // ── Check if CSV exists ────────────────────────────────────
+    if (!fs.existsSync(CSV_PATH)) {
+      logger.warn(`EDOS CSV not found at ${CSV_PATH}`);
+      // Try JSON fallback
+      if (fs.existsSync(JSON_PATH)) {
+        logger.info(`Loading EDOS from JSON fallback: ${JSON_PATH}`);
+        try {
+          const raw = fs.readFileSync(JSON_PATH, 'utf-8');
+          const records = JSON.parse(raw);
+
+          // Re-parse schedule and TAT from raw strings (they may not be in JSON)
+          for (const rec of records) {
+            if (rec.schedule_raw && !rec.schedule) {
+              rec.schedule = parseSchedule(rec.schedule_raw);
+            }
+            if (rec.tat_raw && !rec.tat) {
+              rec.tat = parseTAT(rec.tat_raw);
+            }
+          }
+
+          indexRecords(records);
+          logger.success(`EDOS loaded from JSON: ${records.length} test records`);
+
+          // Cache in Redis if available
+          if (redis) {
+            cacheInRedis(redis, records).catch(() => {});
+          }
+
+          return resolve(records);
+        } catch (err) {
+          logger.error(`Failed to load EDOS JSON: ${err.message}`);
+          return reject(err);
+        }
+      } else {
+        logger.warn('No EDOS data source available (CSV or JSON). Continuing with empty EDOS.');
+        return resolve([]);
+      }
+    }
+
+    // ── Parse CSV ──────────────────────────────────────────────
     const records = [];
     let lineNum = 0;
 
     fs.createReadStream(CSV_PATH)
       .pipe(csv({
-        skipLines: 1,  // Skip the "Edos List,,,,,,,,,,," title row
+        skipLines: 1,  // Skip the "Edos List,,,,,,,,,,,," title row
         mapHeaders: ({ header }) => header.trim().toLowerCase(),
       }))
       .on('data', (row) => {
@@ -61,12 +120,9 @@ function loadEdos(redis) {
         };
 
         records.push(record);
-        edosMap.set(testName.toLowerCase(), record);
-        if (testCode) {
-          edosCodeMap.set(testCode.toLowerCase(), record);
-        }
       })
       .on('end', async () => {
+        indexRecords(records);
         logger.success(`EDOS loaded: ${records.length} test records parsed`);
 
         // Write JSON for inspection
@@ -81,19 +137,7 @@ function loadEdos(redis) {
 
         // Cache in Redis if available
         if (redis) {
-          try {
-            const pipeline = redis.pipeline();
-            for (const rec of records) {
-              pipeline.hset('edos:tests', rec.test_name.toLowerCase(), JSON.stringify(rec));
-              if (rec.test_code) {
-                pipeline.hset('edos:codes', rec.test_code.toLowerCase(), JSON.stringify(rec));
-              }
-            }
-            await pipeline.exec();
-            logger.info('EDOS cached in Redis');
-          } catch (err) {
-            logger.warn(`Redis EDOS cache failed: ${err.message}`);
-          }
+          await cacheInRedis(redis, records);
         }
 
         resolve(records);
@@ -103,6 +147,25 @@ function loadEdos(redis) {
         reject(err);
       });
   });
+}
+
+/**
+ * Cache EDOS records in Redis for fast cross-process lookups.
+ */
+async function cacheInRedis(redis, records) {
+  try {
+    const pipeline = redis.pipeline();
+    for (const rec of records) {
+      pipeline.hset('edos:tests', rec.test_name.toLowerCase(), JSON.stringify(rec));
+      if (rec.test_code) {
+        pipeline.hset('edos:codes', rec.test_code.toLowerCase(), JSON.stringify(rec));
+      }
+    }
+    await pipeline.exec();
+    logger.info('EDOS cached in Redis');
+  } catch (err) {
+    logger.warn(`Redis EDOS cache failed: ${err.message}`);
+  }
 }
 
 /**

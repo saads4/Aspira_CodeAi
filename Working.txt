@@ -1,43 +1,59 @@
-SAP System → Webhook Trigger → Backend Processing → Batch Assignment → ETA → Alerts → Dashboard
+System Workflow: Automated TAT & Batch Monitoring
 
-1)	Entry Regulator implement via Node js
-- WebHook is triggered via a SAP api 
-each SAP contain following payload
-test_name
-method
-specimen_type
-agreed_tat_hours
-priority_tat
-batch_windows
--here node validates the payload ensuring nothing is empty also make sure if there are multiple tests in the payload then it create one record per test
--then all this records  is written in the database mongo db atlas with the status pending or processed false
--return accepted message
-2) Processing Engine implemented via python
-- here python check the database every 5 seconds when it finds the status pending in the db,
-- it pickup and starts processing 
-- Python looks up the test code in edos.json. It retrieves the batch windows, agreed TAT hours, and priority TAT rules
-- Python looks at the received_at timestamp, converts it to lab local time (Asia/Kolkata), then walks through the test's batch windows from earliest to latest. The first window whose cutoff time is at or after the received time is assigned. If all windows for today are missed, it rolls forward day by day until it finds the next valid window.
-- ETA is Calculated = batch run start time + TAT minutes
--SLA Deadline	received_at  +  agreed_tat_hours
-- SLA Breach	ETA  >  SLA Deadline  →  True
-- Overage	(ETA  −  SLA Deadline)  ÷  60  =  minutes over
-- MongoDB is updated
-The sample document is updated with batch_id, batch_run_start, ETA, SLA deadline, breach flag, overage minutes, and status changed to 'assigned'. The processed flag is set to true so it is not picked up again.
-- Finally a alerts 
-Alerts are sent
-If the batch was missed, a MISSED BATCH alert is fired. If the ETA breaches the SLA, an SLA BREACH alert is fired. Both are printed to the terminal in colour, and if Gmail is configured, an email is sent to the configured recipient.
-Every alert is always printed to the Python terminal in colour so you can see it in real time. If email is configured in your .env file, the same alert is also sent as a formatted plain-text email to the configured recipient address.
-Each alert email contains a complete summary:
-•	Sample ID and test name
-•	Priority level
-•	When the sample was received
-•	Which batch it was assigned to and when that batch runs
-•	ETA and SLA deadline
-•	Overage in minutes (for SLA breach alerts)
-•	The reason for the missed batch (for missed batch alerts)
-•	Recommended action
+Architecture: Pure Node.js (Express + BullMQ)
+Flow: SAP Webhook → Entry Regulator → BullMQ (Redis) → Processing Engine (Worker) → MongoDB + Alerts
 
+1) ENTRY REGULATOR (Node.js/Express)
+- Endpoint: POST /webhook
+- Responsibilities:
+  - Receives SAP payload (supports single object or { "tests": [...] } array).
+  - Validation: Ensures all required fields exist (no null/undefined).
+  - Normalization: Creates unique records per test.
+  - Caching: Stores transient record in Redis (`sample:{id}:{test}`) for 24h.
+  - Queueing: Enqueues job to BullMQ `sample-processing` queue.
+- Response: Returns HTTP 202 Accepted immediately.
 
+2) QUEUE SYSTEM (BullMQ/Redis)
+- Event-Driven: No database polling.
+- Priority: "HIGH" priority samples (from SAP) are bumped to the front of the queue.
+- Reliability: Jobs stay in Redis until acknowledged; retries on failure with exponential backoff.
 
+3) PROCESSING ENGINE (Node.js Worker process)
+- Event Source: Listens to BullMQ queue.
+- EDOS Lookup (src/services/edosLoader.js):
+  - Sub-millisecond lookup in memory (Map).
+  - Loads 1070+ test rules from `Edos List.csv` (Fallback to `data/edos.json`).
+- Batch Assignment (src/services/batchAssigner.js):
+  - Converts received_at to Asia/Kolkata timezone (Luxon).
+  - Scans for first valid batch window where `cutoff_time >= received_time`.
+  - Scans up to 30 days forward to ensure NO sample remains unassigned.
+- Computation:
+  - ETA: Calculated based on Batch Run Start + TAT (Relative or Absolute).
+  - SLA Deadline: Calculated as received_at + agreed_tat_hours.
+  - Breach Detection: Flagged TRUE if ETA > SLA.
+  - Overage: Computed as (ETA - SLA) in minutes.
 
+4) STORAGE & DASHBOARD (MongoDB Atlas)
+- Final Storage: Worker upserts results into the `samples` collection.
+- Statuses: 
+  - 'assigned': Batch found within day.
+  - 'delayed': Missed original batch, moved to next available (High Priority).
+  - 'error': Processing failed.
+- Processed Flag: Set to true once worker completes logic.
 
+5) ALERT SYSTEM (src/services/alertService.js)
+- Persistent Logging: Every alert (MISSED_BATCH, SLA_BREACH, DELAY_ESCALATION) is saved in the `alerts` collection in MongoDB.
+- Console Monitoring: Colorized terminal alerts (Red for Missed, Yellow for Breach, Magenta for Escalation).
+- Emailing: Optional SMTP email with full sample snapshot (Times, Priority, Reason, Action).
+- API Visibility: `GET /api/alerts` provides a full audit trail of recent system exceptions.
+
+6) DASHBOARD API (node-service/src/routes/...)
+- /api/samples: Dashboard main view (Search/Filter by status/breach).
+- /api/stats: Aggregate counters (Assigned, Breached, Pending).
+- /api/batches: Heatmap/utilization view of batch queues.
+- /api/alerts: Audit log of system failures.
+
+7) RESILIENCE & OPERATIONS
+- Graceful Shutdown: Server and Worker handle SIGINT/TERM to finish jobs and close connections cleanly.
+- Logging: Centralized logger with timestamps and ISO formatting.
+- Tests: `npm test` runs 28+ assertions on core TAT/Batch logic without needing a database.
