@@ -3,7 +3,7 @@
 // an in-memory lookup Map plus optional Redis cache.
 //
 // Fallback chain:
-//   1. CSV file  (python-service/config/Edos List.csv)
+//   1. CSV file  (Edos List.csv in root)
 //   2. JSON file (data/edos.json) — pre-generated
 // ────────────────────────────────────────────────────────────────
 const fs = require('fs');
@@ -19,7 +19,7 @@ const edosMap = new Map();
 /** In-memory lookup: test_code (lowercase) → edos record */
 const edosCodeMap = new Map();
 
-const CSV_PATH = path.resolve(__dirname, '../../..', 'python-service', 'config', 'Edos List.csv');
+const CSV_PATH = path.resolve(__dirname, '../../..', 'Edos List.csv');
 const JSON_PATH = path.resolve(__dirname, '../../data/edos.json');
 
 /**

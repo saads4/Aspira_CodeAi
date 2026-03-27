@@ -82,7 +82,7 @@ npm install
 
 The system needs the test rules (schedules and TATs) to function.
 
-1.  Ensure the `Edos List.csv` file is present (the system currently looks for it in `../python-service/config/`).
+1.  Ensure the `Edos List.csv` file is present (the system currently looks for it in the project root).
 2.  Run the parser script:
     ```bash
     npm run parse-edos

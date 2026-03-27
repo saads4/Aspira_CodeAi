@@ -180,26 +180,28 @@ Missed batch is treated as a **high-priority system event**:
 ## Folder Structure
 
 ```
-node-service/
-├── .env / .env.example
-├── package.json
-├── README.md
-├── src/
-│   ├── index.js              # Express server + graceful shutdown
-│   ├── worker.js             # BullMQ worker + graceful shutdown
-│   ├── config/
-│   │   ├── env.js            # Environment loader
-│   │   ├── db.js             # MongoDB connection
-│   │   └── redis.js          # Redis connection
-│   ├── models/
-│   │   ├── Sample.js         # Mongoose sample schema
-│   │   └── Alert.js          # Mongoose alert schema
-│   ├── routes/
-│   │   ├── webhook.js        # POST /webhook
-│   │   ├── samples.js        # GET /api/samples
-│   │   ├── stats.js          # GET /api/stats
-│   │   ├── batches.js        # GET /api/batches
-│   │   └── alerts.js         # GET /api/alerts
+Aspira_CodeAi/
+├── Edos List.csv             # Raw EDOS data source (at root)
+├── node-service/
+│   ├── .env / .env.example
+│   ├── package.json
+│   ├── README.md
+│   ├── src/
+│   │   ├── index.js              # Express server + graceful shutdown
+│   │   ├── worker.js             # BullMQ worker + graceful shutdown
+│   │   ├── config/
+│   │   │   ├── env.js            # Environment loader
+│   │   │   ├── db.js             # MongoDB connection
+│   │   │   └── redis.js          # Redis connection
+│   │   ├── models/
+│   │   │   ├── Sample.js         # Mongoose sample schema
+│   │   │   └── Alert.js          # Mongoose alert schema
+│   │   ├── routes/
+│   │   │   ├── webhook.js        # POST /webhook
+│   │   │   ├── samples.js        # GET /api/samples
+│   │   │   ├── stats.js          # GET /api/stats
+│   │   │   ├── batches.js        # GET /api/batches
+│   │   │   └── alerts.js         # GET /api/alerts
 │   ├── middleware/
 │   │   ├── validate.js       # Payload validation
 │   │   └── errorHandler.js   # Global error handler
@@ -217,12 +219,12 @@ node-service/
 │       ├── scheduleParser.js # Schedule string parser
 │       ├── tatParser.js      # TAT string parser
 │       └── logger.js         # Colour console logger
-├── data/
-│   └── edos.json             # Generated from CSV (git-ignored)
-└── test/
-    ├── payload.example.json  # Example payloads
-    ├── test-batch-logic.js   # Batch logic integration tests
-    └── test-clean.js         # Clean test runner (npm test)
+│   ├── data/
+│   │   └── edos.json             # Generated from CSV (git-ignored)
+│   └── test/
+│       ├── payload.example.json  # Example payloads
+│       ├── test-batch-logic.js   # Batch logic integration tests
+│       └── test-clean.js         # Clean test runner (npm test)
 ```
 
 ## Testing
