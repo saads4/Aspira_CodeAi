@@ -14,6 +14,8 @@ function getRedisConnection() {
   connection = new Redis(REDIS_URL, {
     maxRetriesPerRequest: null,   // required by BullMQ
     enableReadyCheck: false,
+    retryDelayOnFailover: 100,
+    lazyConnect: true,
   });
 
   connection.on('connect', () => logger.info('Redis connected'));
