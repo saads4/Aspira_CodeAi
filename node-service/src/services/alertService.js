@@ -158,4 +158,57 @@ async function alertDelayEscalation(sample, result) {
   );
 }
 
-module.exports = { alertMissedBatch, alertSLABreach, alertDelayEscalation };
+// ── RESULT_COMPLETED alert ──────────────────────────────────
+async function alertResultCompleted(sample, metrics) {
+  const data = {
+    sample_id:              sample.sample_id,
+    test_name:              sample.test_name,
+    priority:               sample.priority_tat || 'NORMAL',
+    received_at:            fmt(sample.received_at),
+    eta:                    fmt(sample.eta),
+    sla_deadline:           fmt(sample.sla_deadline),
+    result_ready_at:        fmt(sample.result_ready_at),
+    actual_tat_minutes:     metrics.actual_tat_minutes,
+    completed_within_sla:   metrics.completed_within_sla,
+    prediction_error_minutes: metrics.prediction_error_minutes,
+  };
+
+  // Console (green)
+  logger.resultCompleted(data);
+
+  // Persist to DB
+  try {
+    await Alert.create({
+      type: 'RESULT_COMPLETED',
+      sample_id: sample.sample_id,
+      test_name: sample.test_name,
+      priority: sample.priority_tat || 'NORMAL',
+      alert_data: data,
+    });
+  } catch (err) {
+    logger.warn(`Failed to persist RESULT_COMPLETED alert: ${err.message}`);
+  }
+
+  // Optional email
+  const body = [
+    `=== RESULT COMPLETED ===`,
+    `Sample ID          : ${data.sample_id}`,
+    `Test Name          : ${data.test_name}`,
+    `Priority           : ${data.priority}`,
+    `Received At        : ${data.received_at}`,
+    `ETA                : ${data.eta}`,
+    `SLA Deadline       : ${data.sla_deadline}`,
+    `Result Ready At    : ${data.result_ready_at}`,
+    `Actual TAT         : ${data.actual_tat_minutes} min`,
+    `Within SLA         : ${data.completed_within_sla}`,
+    `Prediction Error   : ${data.prediction_error_minutes} min`,
+    '='.repeat(40),
+  ].join('\n');
+
+  await sendEmail(
+    `✅ RESULT COMPLETED — ${sample.sample_id} (${sample.test_name})`,
+    body
+  );
+}
+
+module.exports = { alertMissedBatch, alertSLABreach, alertDelayEscalation, alertResultCompleted };

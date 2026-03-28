@@ -63,6 +63,23 @@ const logger = {
     console.log(chalk.magenta('─'.repeat(60)));
     console.log('');
   },
+
+  resultCompleted: (data) => {
+    console.log('');
+    console.log(chalk.bgGreen.black.bold(' ✅ RESULT COMPLETED '));
+    console.log(chalk.green('─'.repeat(60)));
+    console.log(chalk.green(`  Sample ID          : ${data.sample_id}`));
+    console.log(chalk.green(`  Test Name          : ${data.test_name}`));
+    console.log(chalk.green(`  Received At        : ${data.received_at}`));
+    console.log(chalk.green(`  ETA                : ${data.eta}`));
+    console.log(chalk.green(`  SLA Deadline       : ${data.sla_deadline}`));
+    console.log(chalk.green(`  Result Ready At    : ${data.result_ready_at}`));
+    console.log(chalk.green(`  Actual TAT         : ${data.actual_tat_minutes} min`));
+    console.log(chalk.green(`  Within SLA         : ${data.completed_within_sla}`));
+    console.log(chalk.green(`  Prediction Error   : ${data.prediction_error_minutes} min`));
+    console.log(chalk.green('─'.repeat(60)));
+    console.log('');
+  },
 };
 
 module.exports = logger;

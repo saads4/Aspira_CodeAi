@@ -15,6 +15,7 @@ const samplesRouter  = require('./routes/samples');
 const statsRouter    = require('./routes/stats');
 const batchesRouter  = require('./routes/batches');
 const alertsRouter   = require('./routes/alerts');
+const resultWebhookRouter = require('./routes/resultWebhook');
 
 const app = express();
 
@@ -29,11 +30,12 @@ app.get('/health', (req, res) => {
 });
 
 // ── Routes ──────────────────────────────────────────────────
-app.use('/webhook',      webhookRouter);
-app.use('/api/samples',  samplesRouter);
-app.use('/api/stats',    statsRouter);
-app.use('/api/batches',  batchesRouter);
-app.use('/api/alerts',   alertsRouter);
+app.use('/webhook',        webhookRouter);
+app.use('/webhook/result', resultWebhookRouter);
+app.use('/api/samples',    samplesRouter);
+app.use('/api/stats',      statsRouter);
+app.use('/api/batches',    batchesRouter);
+app.use('/api/alerts',     alertsRouter);
 
 // ── 404 handler ─────────────────────────────────────────────
 app.use((req, res) => {
@@ -59,6 +61,7 @@ async function start() {
     logger.success(`🚀 TAT Monitor API running on http://localhost:${PORT}`);
     logger.info('Routes:');
     logger.info('  POST /webhook          — SAP sample intake');
+    logger.info('  POST /webhook/result   — SAP result-ready intake');
     logger.info('  GET  /api/samples      — list samples');
     logger.info('  GET  /api/samples/:id  — sample detail');
     logger.info('  GET  /api/stats        — dashboard stats');

@@ -1,0 +1,749 @@
+================================================================================
+  TAT BATCH MONITORING SERVICE — COMPLETE DOCUMENTATION
+  Project: tat-batch-monitoring  |  Version: 1.0.0
+  Stack:   Node.js + Express + BullMQ + MongoDB + Redis + Nodemailer
+================================================================================
+
+TABLE OF CONTENTS
+─────────────────
+  1.  PROJECT OVERVIEW
+  2.  ARCHITECTURE OVERVIEW
+  3.  FOLDER STRUCTURE (with file responsibilities)
+  4.  DATA FLOW / WORKFLOW (end-to-end)
+  5.  ENVIRONMENT CONFIGURATION
+  6.  MONGOOSE MODELS (schemas)
+  7.  ALL API ENDPOINTS (request / response)
+  8.  SERVICES LAYER (business logic)
+  9.  WORKERS (background processors)
+  10. UTILITIES
+  11. MIDDLEWARE
+  12. SETUP & INSTALLATION
+  13. RUNNING THE APPLICATION
+  14. TESTING EVERY FEATURE (curl commands + expected output)
+  15. TROUBLESHOOTING
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+This is an automated Turn-Around-Time (TAT) and Batch Monitoring System for
+laboratory sample processing. It receives samples from SAP via webhooks,
+assigns them to batch windows using EDOS (Equipment Daily Operating Schedule)
+data, computes ETA/SLA deadlines, detects breaches, and fires alerts.
+
+Key Features:
+  • SAP webhook intake (single + multi-test payloads)
+  • Result-ready webhook with idempotency
+  • EDOS-driven batch assignment (CSV/JSON)
+  • TAT computation with SLA breach detection
+  • BullMQ job queues with retry + backoff
+  • MongoDB persistence (samples + alerts)
+  • Redis caching (EDOS data + sample status + idempotency)
+  • Dashboard APIs (stats, batches, alerts, samples)
+  • Email alerting via Nodemailer (optional SMTP)
+  • Colour-coded terminal logging with Chalk
+  • Graceful shutdown (SIGINT/SIGTERM)
+
+================================================================================
+2. ARCHITECTURE OVERVIEW
+================================================================================
+
+  ┌──────────┐   POST /webhook     ┌──────────────┐   BullMQ Queue        ┌────────────────┐
+  │  SAP /   │ ──────────────────► │  Express API │ ──────────────────►   │  Worker Process│
+  │  Client  │                     │  (index.js)  │  "sample-processing"  │  (worker.js)   │
+  └──────────┘                     └──────────────┘                       └────────────────┘
+       │                                  │                                      │
+       │  POST /webhook/result            │  Redis Cache                         │ MongoDB Write
+       │ ────────────────────────►         │  (sample status,                     │ (Sample model)
+       │                                  │   EDOS data,                         │
+       │                                  │   idempotency keys)                  ▼
+       │                                  │                               ┌────────────────┐
+       │  GET /api/*                      │                               │  Alert Service │
+       │ ◄────────────────────────        │                               │  (console+DB+  │
+       │  (samples, stats,                │                               │   email)       │
+       │   batches, alerts)               │                               └────────────────┘
+       │                                  │
+       ▼                                  ▼
+  ┌──────────┐                     ┌──────────────┐
+  │Dashboard │                     │   MongoDB    │
+  │  / API   │                     │  (Samples +  │
+  │ Consumer │                     │   Alerts)    │
+  └──────────┘                     └──────────────┘
+
+Two-Process Architecture:
+  Process 1: Express API Server     (node src/index.js)  — handles HTTP
+  Process 2: BullMQ Worker          (node src/worker.js) — processes jobs
+
+================================================================================
+3. FOLDER STRUCTURE (FILE RESPONSIBILITIES)
+================================================================================
+
+node-service/
+├── .env                        ← Active environment variables (MongoDB Atlas + Redis Cloud)
+├── .env.example                ← Template with placeholder values
+├── package.json                ← Project metadata, npm scripts, dependencies
+├── package-lock.json           ← Locked dependency tree
+│
+├── data/
+│   └── edos.json               ← Pre-parsed EDOS test records (JSON fallback, ~636KB)
+│
+└── src/
+    ├── index.js                ← EXPRESS SERVER entry point
+    │                             - Boots MongoDB + Redis + EDOS
+    │                             - Mounts all routes
+    │                             - Health-check endpoint
+    │                             - Graceful shutdown
+    │
+    ├── worker.js               ← BULLMQ WORKER entry point
+    │                             - Boots MongoDB + Redis + EDOS
+    │                             - Starts "sample-processing" worker (concurrency 5)
+    │                             - Starts "result-processing" worker (concurrency 5)
+    │                             - Rate limited: 20 jobs/sec per worker
+    │                             - Graceful shutdown
+    │
+    ├── config/
+    │   ├── env.js              ← Reads .env via dotenv, exports all config vars
+    │   ├── db.js               ← MongoDB connection via Mongoose
+    │   └── redis.js            ← Redis connection via IORedis (singleton, BullMQ-compatible)
+    │
+    ├── middleware/
+    │   ├── validate.js         ← Webhook payload validation (required fields check)
+    │   └── errorHandler.js     ← Global Express error handler (logs + JSON 500)
+    │
+    ├── models/
+    │   ├── Sample.js           ← Mongoose schema for lab samples (all fields)
+    │   └── Alert.js            ← Mongoose schema for alerts (4 types)
+    │
+    ├── routes/
+    │   ├── webhook.js          ← POST /webhook — SAP sample intake
+    │   ├── resultWebhook.js    ← POST /webhook/result — result-ready intake
+    │   ├── samples.js          ← GET /api/samples, GET /api/samples/:id
+    │   ├── stats.js            ← GET /api/stats — dashboard aggregations
+    │   ├── batches.js          ← GET /api/batches — batch queue summaries
+    │   └── alerts.js           ← GET /api/alerts, GET /api/alerts/summary
+    │
+    ├── services/
+    │   ├── queueService.js     ← BullMQ producer for "sample-processing" queue
+    │   ├── resultQueueService.js ← BullMQ producer for "result-processing" queue
+    │   ├── batchAssigner.js    ← Core batch window + ETA + SLA + breach logic
+    │   ├── edosLoader.js       ← Loads EDOS from CSV or JSON, builds in-memory maps
+    │   └── alertService.js     ← Fires alerts (console + MongoDB + email)
+    │
+    ├── workers/
+    │   ├── sampleProcessor.js  ← Job handler: EDOS lookup → batch assign → save → alert
+    │   └── resultWorker.js     ← Job handler: find sample → compute metrics → complete
+    │
+    ├── utils/
+    │   ├── logger.js           ← Colour-coded console logger (chalk + luxon timestamps)
+    │   ├── scheduleParser.js   ← Parses EDOS schedule strings → structured objects
+    │   ├── tatParser.js        ← Parses EDOS TAT strings → { tat_minutes, deadline_hour }
+    │   └── timezone.js         ← IST (Asia/Kolkata) timezone helpers
+    │
+    └── scripts/
+        └── parseEdos.js        ← One-shot script: parse EDOS CSV → data/edos.json
+
+================================================================================
+4. DATA FLOW / WORKFLOW (END-TO-END)
+================================================================================
+
+SAMPLE INGESTION FLOW:
+──────────────────────
+  1. SAP sends POST /webhook with sample data (JSON)
+  2. validate.js middleware checks required fields
+  3. webhook.js normalizes payload, caches in Redis (TTL 24h)
+  4. webhook.js calls enqueueSample() → BullMQ "sample-processing" queue
+  5. Response: 202 Accepted with sample_ids
+  6. worker.js picks up job from queue
+  7. sampleProcessor.js:
+     a. EDOS lookup (by test_name or test_code)
+     b. If no EDOS match → uses payload defaults (Daily 5pm, agreed_tat_hours)
+     c. assignBatch() computes: batch_id, batch_run_start, batch_cutoff, ETA, SLA
+     d. Detects breach_flag (ETA > SLA) and missed_batch (past cutoff)
+     e. Upserts to MongoDB Sample collection
+     f. Fires alerts: MISSED_BATCH, SLA_BREACH, DELAY_ESCALATION
+
+RESULT COMPLETION FLOW:
+───────────────────────
+  1. SAP sends POST /webhook/result with { sample_id, test_name, result_ready_at }
+  2. resultWebhook.js validates payload
+  3. Redis idempotency check (key TTL 48h)
+  4. Enqueues to BullMQ "result-processing" queue
+  5. Response: 202 Accepted
+  6. resultWorker.js:
+     a. Finds sample in MongoDB
+     b. Skips if already completed (idempotent)
+     c. Computes: actual_tat_minutes, completed_within_sla, prediction_error_minutes
+     d. Updates MongoDB (status → completed)
+     e. Fires RESULT_COMPLETED alert
+
+BATCH ASSIGNMENT LOGIC (batchAssigner.js):
+──────────────────────────────────────────
+  1. Convert received_at to IST
+  2. Scan up to 30 days for a valid batch window from EDOS schedule
+  3. Check if received_at is before cutoff time on schedule days
+  4. If missed today's cutoff → missed_batch = true, scan next day
+  5. Build batch_id: BATCH-{test_code}-{YYYYMMDD}-{HHmm}
+  6. Compute ETA:
+     - If EDOS has deadline_hour → batch_run_start + days offset at that hour
+     - Otherwise → batch_run_start + tat_minutes
+  7. SLA deadline = received_at + agreed_tat_hours
+  8. Breach = (ETA > SLA deadline)
+  9. Overage = breach minutes
+
+================================================================================
+5. ENVIRONMENT CONFIGURATION
+================================================================================
+
+File: .env (copy from .env.example)
+
+  MONGO_URI        = mongodb connection string (Atlas or local)
+  REDIS_URL        = redis connection string (Redis Cloud or local)
+  PORT             = 3000 (Express server port)
+  SMTP_HOST        = (optional) SMTP server for email alerts
+  SMTP_PORT        = 587
+  SMTP_USER        = (optional) SMTP username
+  SMTP_PASS        = (optional) SMTP password
+  ALERT_EMAIL_TO   = (optional) recipient email
+  ALERT_EMAIL_FROM = (optional) sender email (default: tat-monitor@aspira.lab)
+
+================================================================================
+6. MONGOOSE MODELS
+================================================================================
+
+SAMPLE MODEL (models/Sample.js):
+  sample_id           String    (required, indexed)
+  test_id             String
+  test_name           String    (required, indexed)
+  test_code           String
+  method              String
+  specimen_type       String
+  received_at         Date      (required)
+  agreed_tat_hours    Number    (required)
+  priority_tat        String    (default: NORMAL)
+  batch_id            String    (indexed)
+  batch_run_start     Date
+  batch_cutoff        Date
+  eta                 Date
+  sla_deadline        Date
+  breach_flag         Boolean   (default: false, compound indexed)
+  overage_minutes     Number    (default: 0)
+  missed_batch        Boolean   (default: false)
+  delay_reason        String
+  result_ready_at     Date
+  actual_tat_minutes  Number
+  completed_within_sla Boolean
+  prediction_error_minutes Number
+  status              String    (enum: pending|processing|assigned|delayed|completed|error)
+  processed           Boolean   (default: false)
+  created_at / updated_at      (auto-managed timestamps)
+
+ALERT MODEL (models/Alert.js):
+  type                String    (enum: MISSED_BATCH|SLA_BREACH|DELAY_ESCALATION|RESULT_COMPLETED)
+  sample_id           String    (required, indexed)
+  test_name           String    (required)
+  priority            String    (default: NORMAL)
+  alert_data          Object    (nested: received_at, batch_id, eta, sla_deadline, etc.)
+  acknowledged        Boolean   (default: false)
+  created_at / updated_at      (auto-managed timestamps)
+
+================================================================================
+7. ALL API ENDPOINTS
+================================================================================
+
+BASE URL: http://localhost:3000
+
+───── HEALTH ─────
+  GET /health
+    Response: { "status": "ok", "uptime": 123.45 }
+
+───── WEBHOOK (SAMPLE INTAKE) ─────
+  POST /webhook
+    Content-Type: application/json
+
+    Single payload:
+      {
+        "sample_id": "SAM-001",
+        "test_name": "CBC",
+        "method": "Automated",
+        "specimen_type": "Blood",
+        "received_at": "2026-03-28T10:00:00.000Z",
+        "agreed_tat_hours": 24,
+        "priority_tat": "NORMAL"
+      }
+
+    Multi-test payload:
+      {
+        "tests": [
+          { "sample_id": "SAM-002", "test_name": "CBC", ... },
+          { "sample_id": "SAM-003", "test_name": "LFT", ... }
+        ]
+      }
+
+    Response (202): { "status":"accepted","message":"Queued for processing","count":1,"sample_ids":["SAM-001"] }
+
+───── WEBHOOK (RESULT INTAKE) ─────
+  POST /webhook/result
+    Content-Type: application/json
+      {
+        "sample_id": "SAM-001",
+        "test_name": "CBC",
+        "result_ready_at": "2026-03-28T18:30:00.000Z"
+      }
+    Response (202): { "status":"accepted","message":"Result queued for processing","sample_id":"SAM-001" }
+
+───── SAMPLES API ─────
+  GET /api/samples
+    Query params: status, breach (true/false), test_name, missed (true/false), page, limit, sort
+    Response: { status, page, limit, total, totalPages, data: [...] }
+
+  GET /api/samples/:id
+    Response: { status: "ok", data: { ... full sample document ... } }
+
+───── STATS API ─────
+  GET /api/stats
+    Response: {
+      status: "ok",
+      data: {
+        counts: { total, pending, assigned, delayed, breached, completed, error, missed_batch },
+        result_metrics: { avg_actual_tat, sla_compliance_rate, avg_prediction_error, total_completed },
+        recent_breaches: [...top 10...],
+        recent_missed: [...top 10...]
+      }
+    }
+
+───── BATCHES API ─────
+  GET /api/batches
+    Query params: date (YYYY-MM-DD)
+    Response: { status, count, data: [{ batch_id, batch_run_start, total_samples, breached_count, ... }] }
+
+───── ALERTS API ─────
+  GET /api/alerts
+    Query params: type, sample_id, acknowledged (true/false), page, limit
+    Response: { status, page, limit, total, totalPages, data: [...] }
+
+  GET /api/alerts/summary
+    Response: { status: "ok", data: { "MISSED_BATCH": 5, "SLA_BREACH": 3, ... } }
+
+================================================================================
+8. SERVICES LAYER
+================================================================================
+
+queueService.js:
+  - Manages BullMQ "sample-processing" queue
+  - 3 retry attempts, exponential backoff (2s base)
+  - HIGH priority samples get priority=1, others priority=5
+  - Keeps 500 completed + 200 failed jobs
+
+resultQueueService.js:
+  - Manages BullMQ "result-processing" queue
+  - 5 retry attempts, exponential backoff (3s base)
+  - All results get priority=3
+
+batchAssigner.js:
+  - assignBatch(sample, edos) → computes all batch/ETA/SLA fields
+  - Scans up to 30 days for valid batch windows
+  - Handles missed batches, absolute deadlines, relative TATs
+
+edosLoader.js:
+  - Loads from CSV (Edos List.csv) or JSON fallback (data/edos.json)
+  - Builds two in-memory Maps: by test_name and by test_code
+  - Caches in Redis hashes (edos:tests, edos:codes)
+  - lookupTest(name, code) for fast retrieval
+
+alertService.js:
+  - alertMissedBatch()       → console + DB + email
+  - alertSLABreach()         → console + DB + email
+  - alertDelayEscalation()   → console + DB + email
+  - alertResultCompleted()   → console + DB + email
+
+================================================================================
+9. WORKERS
+================================================================================
+
+sampleProcessor.js (queue: "sample-processing"):
+  1. EDOS lookup (by test_name / test_code)
+  2. Fallback to defaults if no EDOS match
+  3. Supports batch_windows override from payload
+  4. Calls assignBatch() for computation
+  5. Upserts Sample document in MongoDB
+  6. Fires MISSED_BATCH, SLA_BREACH, DELAY_ESCALATION alerts
+  7. On error: marks sample status="error", rethrows for BullMQ retry
+
+resultWorker.js (queue: "result-processing"):
+  1. Finds sample by sample_id + test_name
+  2. If not found → throws error (BullMQ will retry)
+  3. If already completed → returns skipped
+  4. Computes: actual_tat_minutes, completed_within_sla, prediction_error_minutes
+  5. Updates MongoDB status → completed
+  6. Fires RESULT_COMPLETED alert
+
+================================================================================
+10. UTILITIES
+================================================================================
+
+logger.js:
+  - Chalk-coloured console output with IST timestamps
+  - Methods: info, success, warn, error, alert
+  - Special boxes: missedBatch, slaBreach, delayEscalation, resultCompleted
+
+scheduleParser.js:
+  - parseSchedule("Daily 6 pm") → { days: [0..6], cutoff_hour: 18, cutoff_minute: 0 }
+  - Handles: Daily, Mon-Fri ranges, Tue/Fri lists, Walk In, 1st&3rd specials
+
+tatParser.js:
+  - parseTAT("Next Day 8 pm") → { tat_minutes: 1440, deadline_hour: 20 }
+  - Handles: Same Day, Next Day, Nth Day, Hours, Days, Weeks
+
+timezone.js:
+  - ZONE = "Asia/Kolkata"
+  - toIST(), getISTNow(), setTimeIST(), parseTimeString(), parseOpenTime()
+
+================================================================================
+11. MIDDLEWARE
+================================================================================
+
+validate.js:
+  - Required fields: sample_id, received_at, test_name, method, specimen_type, agreed_tat_hours
+  - Validates agreed_tat_hours is positive number
+  - Validates received_at is valid ISO 8601
+  - Supports single payload and { tests: [...] } array format
+
+errorHandler.js:
+  - Catches unhandled Express errors
+  - Logs with logger.error + console.error(stack)
+  - Returns JSON { status: "error", message: "..." } with status code
+
+================================================================================
+12. SETUP & INSTALLATION
+================================================================================
+
+PREREQUISITES:
+  • Node.js v18+ installed
+  • MongoDB running (local or Atlas)
+  • Redis running (local or Redis Cloud)
+
+STEP-BY-STEP:
+
+  # 1. Navigate to project
+  cd c:\Users\asaad\Videos\Aspira_CodeAi\node-service
+
+  # 2. Install dependencies
+  npm install
+
+  # 3. Create .env file (copy from example and fill in your values)
+  copy .env.example .env
+  # Edit .env with your MongoDB URI and Redis URL
+
+  # 4. (Optional) Parse EDOS CSV to generate data/edos.json
+  npm run parse-edos
+
+  # 5. Start both API server + worker (development mode)
+  npm run dev
+
+  # OR start them separately in two terminals:
+  # Terminal 1 — API Server:
+  npm start
+  # Terminal 2 — Worker:
+  npm run worker
+
+VERIFY STARTUP:
+  You should see in the console:
+    [SUCCESS] MongoDB connected
+    [INFO]    Redis connected
+    [SUCCESS] EDOS loaded from JSON: XXXX test records
+    [SUCCESS] 🚀 TAT Monitor API running on http://localhost:3000
+    [INFO]    🏭 Worker started — listening to "sample-processing" queue
+    [INFO]    🏭 Worker started — listening to "result-processing" queue
+
+================================================================================
+13. RUNNING THE APPLICATION
+================================================================================
+
+npm scripts:
+  npm start          → node src/index.js       (API server only)
+  npm run worker     → node src/worker.js      (worker only)
+  npm run dev        → concurrently runs both  (recommended for development)
+  npm run parse-edos → node src/scripts/parseEdos.js (parse EDOS CSV → JSON)
+
+================================================================================
+14. TESTING EVERY FEATURE (CURL COMMANDS)
+================================================================================
+
+NOTE: Run "npm run dev" first. All commands use http://localhost:3000.
+      Use PowerShell. For Linux/Mac, remove backticks and use single-line.
+
+─────────────────────────────────────────────────
+TEST 1: Health Check
+─────────────────────────────────────────────────
+  curl http://localhost:3000/health
+
+  Expected: { "status": "ok", "uptime": <number> }
+
+─────────────────────────────────────────────────
+TEST 2: Submit a Single Sample via Webhook
+─────────────────────────────────────────────────
+  curl -X POST http://localhost:3000/webhook `
+    -H "Content-Type: application/json" `
+    -d "{\"sample_id\":\"TEST-001\",\"test_name\":\"CBC\",\"method\":\"Automated\",\"specimen_type\":\"Blood\",\"received_at\":\"2026-03-28T10:00:00.000Z\",\"agreed_tat_hours\":24}"
+
+  Expected: {
+    "status": "accepted",
+    "message": "Queued for processing",
+    "count": 1,
+    "sample_ids": ["TEST-001"]
+  }
+
+  Worker console should show:
+    - Processing sample TEST-001 (CBC)
+    - EDOS match or fallback log
+    - Sample TEST-001 → batch BATCH-... | ETA: ... | Breach: true/false
+    - If breach: SLA BREACH ALERT box
+    - If missed: MISSED BATCH ALERT box
+
+─────────────────────────────────────────────────
+TEST 3: Submit Multiple Tests via Webhook
+─────────────────────────────────────────────────
+  curl -X POST http://localhost:3000/webhook `
+    -H "Content-Type: application/json" `
+    -d "{\"tests\":[{\"sample_id\":\"TEST-002\",\"test_name\":\"LFT\",\"method\":\"Photometry\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T09:00:00.000Z\",\"agreed_tat_hours\":48},{\"sample_id\":\"TEST-003\",\"test_name\":\"KFT\",\"method\":\"Photometry\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T11:00:00.000Z\",\"agreed_tat_hours\":24}]}"
+
+  Expected: { "status":"accepted", "count":2, "sample_ids":["TEST-002","TEST-003"] }
+
+─────────────────────────────────────────────────
+TEST 4: Validation Error (missing fields)
+─────────────────────────────────────────────────
+  curl -X POST http://localhost:3000/webhook `
+    -H "Content-Type: application/json" `
+    -d "{\"sample_id\":\"BAD-001\"}"
+
+  Expected (400): {
+    "status": "rejected",
+    "message": "Validation failed",
+    "details": ["Missing required field: received_at", ...]
+  }
+
+─────────────────────────────────────────────────
+TEST 5: Validation Error (bad agreed_tat_hours)
+─────────────────────────────────────────────────
+  curl -X POST http://localhost:3000/webhook `
+    -H "Content-Type: application/json" `
+    -d "{\"sample_id\":\"BAD-002\",\"test_name\":\"X\",\"method\":\"Y\",\"specimen_type\":\"Z\",\"received_at\":\"2026-03-28T10:00:00Z\",\"agreed_tat_hours\":-5}"
+
+  Expected (400): details includes "agreed_tat_hours must be a positive number"
+
+─────────────────────────────────────────────────
+TEST 6: Submit Result (after sample processed)
+─────────────────────────────────────────────────
+  Wait a few seconds after TEST 2 for sample to be processed, then:
+
+  curl -X POST http://localhost:3000/webhook/result `
+    -H "Content-Type: application/json" `
+    -d "{\"sample_id\":\"TEST-001\",\"test_name\":\"CBC\",\"result_ready_at\":\"2026-03-28T18:30:00.000Z\"}"
+
+  Expected: { "status":"accepted", "message":"Result queued for processing", "sample_id":"TEST-001" }
+
+  Worker console should show:
+    - ✅ RESULT COMPLETED box with actual TAT, within SLA, prediction error
+
+─────────────────────────────────────────────────
+TEST 7: Duplicate Result (idempotency)
+─────────────────────────────────────────────────
+  Run TEST 6 command again (same sample_id + test_name).
+
+  Expected: { "status":"accepted", "message":"Already received — duplicate ignored", "sample_id":"TEST-001" }
+
+─────────────────────────────────────────────────
+TEST 8: Result Validation Error
+─────────────────────────────────────────────────
+  curl -X POST http://localhost:3000/webhook/result `
+    -H "Content-Type: application/json" `
+    -d "{\"sample_id\":\"TEST-001\"}"
+
+  Expected (400): {
+    "status": "rejected",
+    "details": ["Missing or invalid required field: test_name", "Missing required field: result_ready_at"]
+  }
+
+─────────────────────────────────────────────────
+TEST 9: List All Samples
+─────────────────────────────────────────────────
+  curl http://localhost:3000/api/samples
+
+  Expected: { "status":"ok", "page":1, "limit":50, "total":<N>, "totalPages":<N>, "data":[...] }
+
+─────────────────────────────────────────────────
+TEST 10: Filter Samples by Status
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/samples?status=assigned"
+  curl "http://localhost:3000/api/samples?status=completed"
+  curl "http://localhost:3000/api/samples?status=delayed"
+
+─────────────────────────────────────────────────
+TEST 11: Filter Samples with Breach
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/samples?breach=true"
+
+─────────────────────────────────────────────────
+TEST 12: Filter Missed Batch Samples
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/samples?missed=true"
+
+─────────────────────────────────────────────────
+TEST 13: Search Samples by Test Name
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/samples?test_name=CBC"
+
+─────────────────────────────────────────────────
+TEST 14: Paginated Samples
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/samples?page=1&limit=5"
+
+─────────────────────────────────────────────────
+TEST 15: Get Single Sample Detail
+─────────────────────────────────────────────────
+  curl http://localhost:3000/api/samples/TEST-001
+
+  Expected: { "status":"ok", "data": { sample_id: "TEST-001", ... all fields ... } }
+
+─────────────────────────────────────────────────
+TEST 16: Sample Not Found
+─────────────────────────────────────────────────
+  curl http://localhost:3000/api/samples/NONEXISTENT
+
+  Expected (404): { "status":"error", "message":"Sample not found" }
+
+─────────────────────────────────────────────────
+TEST 17: Dashboard Stats
+─────────────────────────────────────────────────
+  curl http://localhost:3000/api/stats
+
+  Expected: Full stats with counts (total, pending, assigned, delayed, breached, completed,
+  error, missed_batch), result_metrics, recent_breaches, recent_missed
+
+─────────────────────────────────────────────────
+TEST 18: Batch Queues
+─────────────────────────────────────────────────
+  curl http://localhost:3000/api/batches
+
+  Expected: { "status":"ok", "count":<N>, "data":[{ batch_id, total_samples, ... }] }
+
+─────────────────────────────────────────────────
+TEST 19: Batch Queues Filtered by Date
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/batches?date=2026-03-28"
+
+─────────────────────────────────────────────────
+TEST 20: List Alerts
+─────────────────────────────────────────────────
+  curl http://localhost:3000/api/alerts
+
+  Expected: Paginated list of all alerts
+
+─────────────────────────────────────────────────
+TEST 21: Filter Alerts by Type
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/alerts?type=SLA_BREACH"
+  curl "http://localhost:3000/api/alerts?type=MISSED_BATCH"
+  curl "http://localhost:3000/api/alerts?type=RESULT_COMPLETED"
+  curl "http://localhost:3000/api/alerts?type=DELAY_ESCALATION"
+
+─────────────────────────────────────────────────
+TEST 22: Filter Alerts by Sample ID
+─────────────────────────────────────────────────
+  curl "http://localhost:3000/api/alerts?sample_id=TEST-001"
+
+─────────────────────────────────────────────────
+TEST 23: Alert Summary (counts by type)
+─────────────────────────────────────────────────
+  curl http://localhost:3000/api/alerts/summary
+
+  Expected: { "status":"ok", "data": { "SLA_BREACH": 2, "MISSED_BATCH": 1, ... } }
+
+─────────────────────────────────────────────────
+TEST 24: 404 Route
+─────────────────────────────────────────────────
+  curl http://localhost:3000/nonexistent
+
+  Expected (404): { "status":"error", "message":"Route GET /nonexistent not found" }
+
+─────────────────────────────────────────────────
+TEST 25: HIGH Priority Sample
+─────────────────────────────────────────────────
+  curl -X POST http://localhost:3000/webhook `
+    -H "Content-Type: application/json" `
+    -d "{\"sample_id\":\"URGENT-001\",\"test_name\":\"Troponin I\",\"method\":\"CLIA\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T23:00:00.000Z\",\"agreed_tat_hours\":4,\"priority_tat\":\"HIGH\"}"
+
+  Expected: Processed with priority=1 in queue (ahead of NORMAL samples)
+
+─────────────────────────────────────────────────
+TEST 26: Custom Batch Windows Override
+─────────────────────────────────────────────────
+  curl -X POST http://localhost:3000/webhook `
+    -H "Content-Type: application/json" `
+    -d "{\"sample_id\":\"CUSTOM-001\",\"test_name\":\"Special Test\",\"method\":\"Manual\",\"specimen_type\":\"Urine\",\"received_at\":\"2026-03-28T08:00:00.000Z\",\"agreed_tat_hours\":12,\"batch_windows\":[{\"days\":[1,3,5],\"cutoff_hour\":14,\"cutoff_minute\":0}]}"
+
+  Expected: Uses custom batch schedule (Mon/Wed/Fri 2pm) instead of EDOS
+
+─────────────────────────────────────────────────
+TEST 27: End-to-End Flow (Complete Lifecycle)
+─────────────────────────────────────────────────
+  Step 1: Submit sample
+    curl -X POST http://localhost:3000/webhook -H "Content-Type: application/json" -d "{\"sample_id\":\"E2E-001\",\"test_name\":\"TSH\",\"method\":\"CLIA\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T10:00:00.000Z\",\"agreed_tat_hours\":24}"
+
+  Step 2: Wait 3 seconds, then verify sample was processed
+    curl http://localhost:3000/api/samples/E2E-001
+
+  Step 3: Check stats
+    curl http://localhost:3000/api/stats
+
+  Step 4: Submit result
+    curl -X POST http://localhost:3000/webhook/result -H "Content-Type: application/json" -d "{\"sample_id\":\"E2E-001\",\"test_name\":\"TSH\",\"result_ready_at\":\"2026-03-28T20:00:00.000Z\"}"
+
+  Step 5: Wait 3 seconds, verify completion
+    curl http://localhost:3000/api/samples/E2E-001
+    → status should be "completed", actual_tat_minutes populated
+
+  Step 6: Check alerts
+    curl "http://localhost:3000/api/alerts?sample_id=E2E-001"
+
+  Step 7: Check updated stats
+    curl http://localhost:3000/api/stats
+    → completed count should increase, result_metrics should update
+
+================================================================================
+15. TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "MongoDB connection failed"
+  → Check MONGO_URI in .env. If using Atlas, ensure IP is whitelisted.
+  → Test: node -e "require('mongoose').connect('YOUR_URI').then(()=>console.log('OK'))"
+
+PROBLEM: "Redis error: connect ECONNREFUSED"
+  → Check REDIS_URL in .env. Ensure Redis is running.
+  → For local: redis-server (Linux/Mac) or use Redis for Windows
+  → For cloud: verify URL format redis://default:password@host:port
+
+PROBLEM: Worker not processing jobs
+  → Ensure worker is running: npm run worker (or npm run dev for both)
+  → Check Redis is the SAME instance for both API and worker
+  → Check console for worker error messages
+
+PROBLEM: EDOS not loading / "No EDOS match"
+  → If CSV not present, ensure data/edos.json exists (636KB file)
+  → Run: npm run parse-edos (requires Edos List.csv in project root)
+  → Check console for "EDOS loaded from JSON: XXXX test records"
+
+PROBLEM: No email alerts sent
+  → Email is optional. Fill SMTP_HOST, SMTP_USER, SMTP_PASS in .env
+  → Alerts still appear in console and MongoDB regardless of email config
+
+PROBLEM: "EDOS CSV not found" warning
+  → This is normal if you don't have the CSV. JSON fallback is used automatically.
+
+PROBLEM: Samples stuck in "pending"
+  → Worker may not be running. Start with: npm run worker
+  → Check BullMQ queue in Redis: keys sample:* or bull:sample-processing:*
+
+================================================================================
+  END OF DOCUMENTATION
+================================================================================

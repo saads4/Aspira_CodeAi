@@ -1,7 +1,8 @@
 // ─── Worker Entry Point ─────────────────────────────────────────
 // Run as a separate process:  node src/worker.js
-// Listens to the BullMQ "sample-processing" queue and processes
-// each job via the sampleProcessor handler.
+// Listens to BullMQ queues:
+//   - "sample-processing" (ingestion pipeline)
+//   - "result-processing" (result completion pipeline)
 // ────────────────────────────────────────────────────────────────
 const { Worker } = require('bullmq');
 const mongoose = require('mongoose');
@@ -9,9 +10,11 @@ const { getRedisConnection } = require('./config/redis');
 const { connectDB } = require('./config/db');
 const { loadEdos } = require('./services/edosLoader');
 const { processSample } = require('./workers/sampleProcessor');
+const { processResult } = require('./workers/resultWorker');
 const logger = require('./utils/logger');
 
-let worker = null;
+let sampleWorker = null;
+let resultWorker = null;
 
 async function startWorker() {
   // Connect MongoDB
@@ -21,8 +24,8 @@ async function startWorker() {
   const redis = getRedisConnection();
   await loadEdos(redis);
 
-  // Create BullMQ worker
-  worker = new Worker(
+  // ── Sample-processing worker (existing) ─────────────────────
+  sampleWorker = new Worker(
     'sample-processing',
     async (job) => {
       return processSample(job);
@@ -37,28 +40,67 @@ async function startWorker() {
     }
   );
 
-  worker.on('completed', (job, result) => {
+  sampleWorker.on('completed', (job, result) => {
     logger.success(`Job ${job.id} completed → ${result?.sample_id || 'OK'}`);
   });
 
-  worker.on('failed', (job, err) => {
+  sampleWorker.on('failed', (job, err) => {
     logger.error(`Job ${job?.id} failed: ${err.message}`);
   });
 
-  worker.on('error', (err) => {
-    logger.error(`Worker error: ${err.message}`);
+  sampleWorker.on('error', (err) => {
+    logger.error(`Sample worker error: ${err.message}`);
   });
 
   logger.info('🏭 Worker started — listening to "sample-processing" queue');
+
+  // ── Result-processing worker (new) ──────────────────────────
+  resultWorker = new Worker(
+    'result-processing',
+    async (job) => {
+      return processResult(job);
+    },
+    {
+      connection: getRedisConnection(),
+      concurrency: 5,
+      limiter: {
+        max: 20,
+        duration: 1000,
+      },
+    }
+  );
+
+  resultWorker.on('completed', (job, result) => {
+    if (result?.skipped) {
+      logger.warn(`Result job ${job.id} skipped (already completed)`);
+    } else {
+      logger.success(`Result job ${job.id} completed → ${result?.sample_id || 'OK'}`);
+    }
+  });
+
+  resultWorker.on('failed', (job, err) => {
+    logger.error(`Result job ${job?.id} failed: ${err.message}`);
+  });
+
+  resultWorker.on('error', (err) => {
+    logger.error(`Result worker error: ${err.message}`);
+  });
+
+  logger.info('🏭 Worker started — listening to "result-processing" queue');
 }
 
 // ── Graceful Shutdown ───────────────────────────────────────
 async function shutdown(signal) {
   logger.warn(`${signal} received — shutting down worker gracefully...`);
 
-  if (worker) {
-    await worker.close();
-    logger.info('BullMQ worker closed');
+  if (sampleWorker) {
+    await sampleWorker.close();
+    logger.info('BullMQ sample worker closed');
+  }
+
+  if (resultWorker) {
+    await resultWorker.close();
+    logger.info('BullMQ result worker closed');
   }
 
   try {

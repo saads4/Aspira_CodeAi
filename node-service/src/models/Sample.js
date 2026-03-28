@@ -28,10 +28,16 @@ const sampleSchema = new mongoose.Schema(
     missed_batch:     { type: Boolean, default: false },
     delay_reason:     { type: String, default: '' },
 
+    // Result-completion fields
+    result_ready_at:         { type: Date },
+    actual_tat_minutes:      { type: Number },
+    completed_within_sla:    { type: Boolean },
+    prediction_error_minutes:{ type: Number },
+
     // Status
     status: {
       type: String,
-      enum: ['pending', 'processing', 'assigned', 'delayed', 'error'],
+      enum: ['pending', 'processing', 'assigned', 'delayed', 'completed', 'error'],
       default: 'pending',
       index: true,
     },
