@@ -113,9 +113,24 @@ curl http://localhost:3000/health
 ```
 
 ### Step 2: Submit a Test Sample
-Use `curl` or a tool like Postman to send a webhook.
+Use PowerShell `Invoke-RestMethod` or a tool like Postman to send a webhook.
 
 **Scenario A: Normal Sample (On time)**
+```powershell
+$body = @{
+    sample_id = "SAP-001"
+    received_at = "2026-03-31T14:00:00+05:30"
+    test_name = "test_1"
+    method = "EIA"
+    specimen_type = "Serum"
+    agreed_tat_hours = 30
+    priority_tat = "NORMAL"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:3000/webhook" -Method POST -ContentType "application/json" -Body $body
+```
+
+*Alternative: Use curl in Git Bash or WSL:*
 ```bash
 curl -X POST http://localhost:3000/webhook \
   -H "Content-Type: application/json" \
@@ -132,6 +147,18 @@ curl -X POST http://localhost:3000/webhook \
 
 **Scenario B: Missed Batch (Late arrival)**
 Receive a sample after the 6:00 PM cutoff for `test_1`:
+```powershell
+$body = @{
+    sample_id = "SAP-002"
+    received_at = "2026-03-31T21:00:00+05:30"
+    test_name = "test_1"
+    agreed_tat_hours = 12
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:3000/webhook" -Method POST -ContentType "application/json" -Body $body
+```
+
+*Alternative: Use curl in Git Bash or WSL:*
 ```bash
 curl -X POST http://localhost:3000/webhook \
   -H "Content-Type: application/json" \
