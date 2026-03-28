@@ -104,7 +104,79 @@ npm run worker
 
 ---
 
-## 7. Testing the System
+## 8. Frontend Setup
+
+The system includes a Next.js-based frontend dashboard for visualizing the TAT monitoring data.
+
+### Step 1: Install Frontend Dependencies
+Navigate to the frontend directory and install dependencies:
+```bash
+cd frontend
+npm install
+```
+
+### Step 2: Configure Frontend Environment
+The frontend needs to know where to reach the backend API. Create a `.env.local` file in the frontend directory:
+```bash
+# frontend/.env.local
+NEXT_PUBLIC_API_URL=http://localhost:3000
+```
+
+### Step 3: Start the Frontend Development Server
+```bash
+npm run dev
+```
+
+The frontend will be available at `http://localhost:3001` (Next.js default port).
+
+### Frontend Features
+- **Real-time Dashboard**: Live updates using Socket.io
+- **Sample Management**: View and filter samples
+- **Batch Monitoring**: Track batch queues and metrics
+- **Alert System**: Visual alerts for missed batches and SLA breaches
+- **Analytics**: Charts and statistics using Recharts
+
+---
+
+## 9. Running the Complete System
+
+For the full experience, you'll need three services running:
+
+### Option 1: All Services (Recommended for Development)
+**Terminal 1 (Backend API + Worker):**
+```bash
+cd node-service
+npm run dev
+```
+
+**Terminal 2 (Frontend):**
+```bash
+cd frontend
+npm run dev
+```
+
+### Option 2: Production Style
+**Terminal 1 (Backend API):**
+```bash
+cd node-service
+npm start
+```
+
+**Terminal 2 (Backend Worker):**
+```bash
+cd node-service
+npm run worker
+```
+
+**Terminal 3 (Frontend):**
+```bash
+cd frontend
+npm run dev
+```
+
+---
+
+## 10. Testing the System
 
 ### Step 1: Health Check
 Verify the server is up:
@@ -145,7 +217,7 @@ curl -X POST http://localhost:3000/webhook \
 
 ---
 
-## 8. Verifying Results
+## 11. Verifying Results
 
 ### 1. Check Console Logs
 Look at the terminal where your **Worker** is running. You should see:
@@ -159,15 +231,40 @@ Open **MongoDB Atlas > Database > Browse Collections**.
 - Look at the `samples` collection: You should see the computed `batch_id`, `eta`, `sla_deadline`, and `breach_flag`.
 - Look at the `alerts` collection: You should see entries for every missed batch or breach.
 
-### 3. Use the Dashboard APIs
+### 3. Use the Backend APIs
 - **List Samples**: `GET http://localhost:3000/api/samples`
 - **View Stats**: `GET http://localhost:3000/api/stats`
 - **View Recent Alerts**: `GET http://localhost:3000/api/alerts`
+
+### 4. Test the Frontend Dashboard
+Open your browser and navigate to `http://localhost:3001`:
+- **Dashboard Overview**: See real-time statistics and charts
+- **Samples Tab**: View and filter sample data
+- **Batches Tab**: Monitor batch queues and metrics
+- **Alerts Tab**: View system alerts and notifications
+- **Real-time Updates**: The dashboard should automatically refresh when new samples are processed
+
+### 5. Test End-to-End Workflow
+1. With all services running, submit a test sample via curl or the frontend
+2. Watch the console logs for processing
+3. Check the frontend dashboard for real-time updates
+4. Verify the data appears correctly in MongoDB
 
 ---
 
 ## Troubleshooting
 
+### Backend Issues
 - **Redis Connection Error**: Ensure the Redis server is running and the `REDIS_URL` in `.env` matches.
 - **MongoDB Authentication Error**: Ensure your username/password in the URI are correct and your IP is whitelisted in Atlas.
 - **EDOS Load Failure**: Ensure you've run `npm run parse-edos` at least once to generate the JSON cache.
+
+### Frontend Issues
+- **Frontend won't start**: Ensure you're in the `frontend` directory and have run `npm install`.
+- **API Connection Error**: Verify the backend is running on `http://localhost:3000` and the `NEXT_PUBLIC_API_URL` in `frontend/.env.local` is correct.
+- **Real-time updates not working**: Check that Socket.io is properly configured and the backend WebSocket connection is established.
+- **Blank pages or errors**: Check the browser console for JavaScript errors and ensure all dependencies are installed.
+
+### Port Conflicts
+- If port 3000 is occupied: Change the backend `PORT` in `node-service/.env`
+- If port 3001 is occupied: Start the frontend with `npm run dev -- -p 3002` and update `NEXT_PUBLIC_API_URL` accordingly
