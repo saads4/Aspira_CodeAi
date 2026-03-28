@@ -272,6 +272,12 @@ curl http://localhost:3000/api/alerts
 curl http://localhost:3000/api/alerts/summary
 ```
 
+## Demo
+
+Watch the system in action:
+
+🎥 [Testing Video](testing%20video.mp4)
+
 ## Key Design Decisions
 
 - **Event-driven, NO polling**: BullMQ queue triggers processing, no DB polling
