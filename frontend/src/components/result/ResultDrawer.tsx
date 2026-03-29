@@ -19,21 +19,28 @@ const DEFAULTS: ResultPayload = {
 };
 
 export default function ResultDrawer() {
-  const { resultDrawerOpen, setResultDrawerOpen } = useUIStore();
-
-  if (!resultDrawerOpen) return null;
-
-  const close = setResultDrawerOpen;
+  // ⚠️ ALL hooks must be at the top — before any conditional returns.
+  // The parent guards with {resultOpen && <ResultDrawer />} so this
+  // component only mounts when the drawer is open.
+  const { setResultDrawerOpen } = useUIStore();
   const [form, setForm] = useState<ResultPayload>(DEFAULTS);
   const [loading, setLoading] = useState(false);
   const [lastSubmitted, setLastSubmitted] = useState<string | null>(null);
 
+  const close = setResultDrawerOpen;
+
   const set = (field: keyof ResultPayload, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
+  const isNotEmpty = (value: string): boolean => {
+    // Remove all whitespace including non-breaking spaces and check if anything remains
+    const cleaned = value.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+    return cleaned.length > 0;
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.sample_id.trim() || !form.test_name.trim()) {
+    if (!isNotEmpty(form.sample_id) || !isNotEmpty(form.test_name)) {
       toast.error('Sample ID and Test Name are required');
       return;
     }
@@ -90,29 +97,37 @@ export default function ResultDrawer() {
             </div>
           )}
 
-          <form id="result-form" onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <form id="result-form" onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="form-group">
               <label className="form-label" htmlFor="result-sample-id">Sample ID *</label>
               <input
                 id="result-sample-id"
-                className="input"
+                className={`input ${!isNotEmpty(form.sample_id) && form.sample_id.length > 0 ? 'input-error' : ''}`}
                 placeholder="SAP-2026-00142"
                 value={form.sample_id}
                 onChange={(e) => set('sample_id', e.target.value)}
-                required
               />
+              {!isNotEmpty(form.sample_id) && form.sample_id.length > 0 && (
+                <div className="text-xs text-danger" style={{ marginTop: 4 }}>
+                  Sample ID cannot be empty or whitespace only
+                </div>
+              )}
             </div>
 
             <div className="form-group">
               <label className="form-label" htmlFor="result-test-name">Test Name *</label>
               <input
                 id="result-test-name"
-                className="input"
+                className={`input ${!isNotEmpty(form.test_name) && form.test_name.length > 0 ? 'input-error' : ''}`}
                 placeholder="e.g. test_1"
                 value={form.test_name}
                 onChange={(e) => set('test_name', e.target.value)}
-                required
               />
+              {!isNotEmpty(form.test_name) && form.test_name.length > 0 && (
+                <div className="text-xs text-danger" style={{ marginTop: 4 }}>
+                  Test Name cannot be empty or whitespace only
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -123,7 +138,6 @@ export default function ResultDrawer() {
                 type="datetime-local"
                 value={form.result_ready_at}
                 onChange={(e) => set('result_ready_at', e.target.value)}
-                required
               />
             </div>
           </form>

@@ -91,6 +91,7 @@ export function statusLabel(status: string): string {
     processing: 'Processing',
     assigned:   'Assigned',
     delayed:    'Delayed',
+    completed:  'Completed',
     error:      'Error',
   };
   return map[status] ?? status;

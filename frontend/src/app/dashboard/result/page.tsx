@@ -1,11 +1,11 @@
 'use client';
 import Topbar from '@/components/layout/Topbar';
-import ResultDrawer from '@/components/result/ResultDrawer';
+
 import { CheckCircle, ArrowRight, Clock, CheckSquare } from 'lucide-react';
 import { useUIStore } from '@/store/slices/uiSlice';
 
 export default function ResultPage() {
-  const { resultDrawerOpen, setResultDrawerOpen } = useUIStore();
+  const { setResultDrawerOpen } = useUIStore();
 
   const TIPS = [
     { icon: '✅', title: 'Mark Complete', desc: 'Submit sample_id, test_name, and result_ready_at to mark samples as completed' },
@@ -130,7 +130,7 @@ Content-Type: application/json
         </div>
       </main>
 
-      {resultDrawerOpen && <ResultDrawer />}
+
     </div>
   );
 }

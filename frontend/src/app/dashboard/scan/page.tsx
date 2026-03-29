@@ -1,11 +1,11 @@
 'use client';
 import Topbar from '@/components/layout/Topbar';
-import ScanDrawer from '@/components/scan/ScanDrawer';
+
 import { ScanLine, ArrowRight, FlaskConical, Clock } from 'lucide-react';
 import { useUIStore } from '@/store/slices/uiSlice';
 
 export default function ScanPage() {
-  const { scanDrawerOpen, setScanDrawerOpen } = useUIStore();
+  const { setScanDrawerOpen } = useUIStore();
 
   const TIPS = [
     { icon: '🧪', title: 'Single Sample', desc: 'Submit one sample with a unique Sample ID and test name' },
@@ -135,7 +135,7 @@ Content-Type: application/json
         </div>
       </main>
 
-      {scanDrawerOpen && <ScanDrawer />}
+
     </div>
   );
 }

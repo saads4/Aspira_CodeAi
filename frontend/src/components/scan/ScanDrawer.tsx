@@ -15,24 +15,33 @@ const DEFAULTS: ScanPayload = {
   method: '',
   specimen_type: 'Serum',
   test_id: '',
+  test_code: '',
 };
 
 export default function ScanDrawer() {
-  const { scanDrawerOpen, setScanDrawerOpen } = useUIStore();
-
-  if (!scanDrawerOpen) return null;
-
-  const close = setScanDrawerOpen;
+  // ⚠️ ALL hooks must be at the top — before any conditional returns.
+  // The parent already guards with {scanOpen && <ScanDrawer />} so this
+  // component only mounts when the drawer is open.
+  const { setScanDrawerOpen } = useUIStore();
   const [form, setForm] = useState<ScanPayload>(DEFAULTS);
   const [loading, setLoading] = useState(false);
   const [lastResult, setLastResult] = useState<{ count: number; ids: string[] } | null>(null);
 
+  const close = setScanDrawerOpen;
+
   const set = (field: keyof ScanPayload, value: string | number) =>
     setForm((f) => ({ ...f, [field]: value }));
 
+  const isNotEmpty = (value: string): boolean => {
+    // Remove all whitespace including non-breaking spaces and check if anything remains
+    const cleaned = value.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+    return cleaned.length > 0;
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.sample_id.trim() || !form.test_name.trim()) {
+    
+    if (!isNotEmpty(form.sample_id) || !isNotEmpty(form.test_name)) {
       toast.error('Sample ID and Test Name are required');
       return;
     }
@@ -86,18 +95,22 @@ export default function ScanDrawer() {
             </div>
           )}
 
-          <form id="scan-form" onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <form id="scan-form" onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label" htmlFor="scan-sample-id">Sample ID *</label>
                 <input
                   id="scan-sample-id"
-                  className="input"
+                  className={`input ${!isNotEmpty(form.sample_id) && form.sample_id.length > 0 ? 'input-error' : ''}`}
                   placeholder="SAP-2026-00142"
                   value={form.sample_id}
                   onChange={(e) => set('sample_id', e.target.value)}
-                  required
                 />
+                {!isNotEmpty(form.sample_id) && form.sample_id.length > 0 && (
+                  <div className="text-xs text-danger" style={{ marginTop: 4 }}>
+                    Sample ID cannot be empty or whitespace only
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label" htmlFor="scan-test-id">Test ID</label>
@@ -111,16 +124,32 @@ export default function ScanDrawer() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="scan-test-name">Test Name *</label>
-              <input
-                id="scan-test-name"
-                className="input"
-                placeholder="e.g. test_1"
-                value={form.test_name}
-                onChange={(e) => set('test_name', e.target.value)}
-                required
-              />
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label" htmlFor="scan-test-name">Test Name *</label>
+                <input
+                  id="scan-test-name"
+                  className={`input ${!isNotEmpty(form.test_name) && form.test_name.length > 0 ? 'input-error' : ''}`}
+                  placeholder="e.g. CBC"
+                  value={form.test_name}
+                  onChange={(e) => set('test_name', e.target.value)}
+                />
+                {!isNotEmpty(form.test_name) && form.test_name.length > 0 && (
+                  <div className="text-xs text-danger" style={{ marginTop: 4 }}>
+                    Test Name cannot be empty or whitespace only
+                  </div>
+                )}
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="scan-test-code">Test Code</label>
+                <input
+                  id="scan-test-code"
+                  className="input"
+                  placeholder="e.g. CBC-001"
+                  value={form.test_code}
+                  onChange={(e) => set('test_code', e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="grid-2">
@@ -155,7 +184,6 @@ export default function ScanDrawer() {
                   type="datetime-local"
                   value={form.received_at}
                   onChange={(e) => set('received_at', e.target.value)}
-                  required
                 />
               </div>
               <div className="form-group">
@@ -168,7 +196,6 @@ export default function ScanDrawer() {
                   max={720}
                   value={form.agreed_tat_hours}
                   onChange={(e) => set('agreed_tat_hours', Number(e.target.value))}
-                  required
                 />
               </div>
             </div>

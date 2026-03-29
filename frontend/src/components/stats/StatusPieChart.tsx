@@ -6,6 +6,7 @@ interface Props { stats: Stats | null; }
 
 const COLORS = {
   assigned:     '#22c55e',
+  completed:    '#10b981',
   delayed:      '#f97316',
   breached:     '#ef4444',
   pending:      '#64748b',
@@ -19,6 +20,7 @@ export default function StatusPieChart({ stats }: Props) {
 
   const data = [
     { name: 'Assigned',   value: counts.assigned,    fill: COLORS.assigned },
+    { name: 'Completed',  value: counts.completed,   fill: COLORS.completed },
     { name: 'Delayed',    value: counts.delayed,      fill: COLORS.delayed },
     { name: 'Breached',   value: counts.breached,     fill: COLORS.breached },
     { name: 'Pending',    value: counts.pending,      fill: COLORS.pending },

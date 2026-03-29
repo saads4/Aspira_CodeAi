@@ -24,9 +24,9 @@ interface RequestOptions extends RequestInit {
   retryDelay?: number;
 }
 
-// In the browser: use relative URLs so Next.js rewrites proxy to the backend.
+// In browser: use relative URLs so Next.js rewrites proxy to the backend.
 // In SSR: use the full URL from env.
-const BASE_URL = "http://localhost:5000";
+const BASE_URL = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
 
 // In-flight request deduplication map (GET only)
 const inflight = new Map<string, Promise<Response>>();
@@ -46,10 +46,12 @@ async function fetchWithRetry(
   const isGet = !fetchOptions.method || fetchOptions.method === 'GET';
   const cacheKey = isGet ? url : null;
 
-  // Deduplicate in-flight GETs
+  // Deduplicate in-flight GETs.
+  // Clone the response so each concurrent caller gets its own readable body
+  // stream — sharing the same Response object causes "body stream already read".
   if (cacheKey && inflight.has(cacheKey)) {
     clearTimeout(tid);
-    return inflight.get(cacheKey)!;
+    return inflight.get(cacheKey)!.then((r) => r.clone());
   }
 
   const attempt = async (attemptsLeft: number): Promise<Response> => {
@@ -110,7 +112,19 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   try {
     data = await response.json();
   } catch (err) {
-    throw new ApiError(response.status, 'PARSE_ERROR', 'Failed to parse JSON response');
+    // Attempt to read the raw body for debugging.
+    // Guard with try/catch: if the stream was already consumed (e.g. a shared
+    // response that wasn't cloned) response.text() will throw as well.
+    let responseText = '<unreadable>';
+    try {
+      responseText = await response.clone().text();
+    } catch {
+      // body already consumed — ignore
+    }
+    console.error('API Client - Failed to parse JSON. Response status:', response.status);
+    console.error('API Client - Response headers:', Object.fromEntries(response.headers.entries()));
+    console.error('API Client - Response body:', responseText);
+    throw new ApiError(response?.status || 500, 'PARSE_ERROR', `Failed to parse JSON response. Body: ${responseText.substring(0, 200)}`);
   }
 
   if (!response.ok) {

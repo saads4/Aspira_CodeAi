@@ -62,6 +62,7 @@ export const alertsService = {
   list(filters: Partial<AlertFilters>): Promise<PaginatedResponse<Alert>> {
     const qs = buildQuery({
       type: filters.type,
+      sample_id: filters.sample_id,
       acknowledged:
         filters.acknowledged != null ? String(filters.acknowledged) : undefined,
       page: filters.page ?? 1,
