@@ -35,7 +35,7 @@ export default function ExceptionsPage() {
       <Topbar title="Exception Dashboard" onRefresh={handleRefresh} refreshing={refreshing} />
       <main className="page-content">
         {/* Alert type summary cards */}
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 24 }}>
+        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 24 }}>
           <div className="kpi-card critical">
             <div className="kpi-label">🚨 SLA Breach</div>
             <div className="kpi-value critical">{summary?.SLA_BREACH ?? 0}</div>
@@ -48,12 +48,16 @@ export default function ExceptionsPage() {
             <div className="kpi-label">🟠 Delay Escalation</div>
             <div className="kpi-value delayed">{summary?.DELAY_ESCALATION ?? 0}</div>
           </div>
+          <div className="kpi-card normal">
+            <div className="kpi-label">✅ Results Completed</div>
+            <div className="kpi-value normal">{summary?.RESULT_COMPLETED ?? 0}</div>
+          </div>
         </div>
 
         {/* Filter bar */}
         <div className="filter-bar" style={{ marginBottom: 16 }}>
           <label className="form-label">Filter:</label>
-          {(['', 'SLA_BREACH', 'MISSED_BATCH', 'DELAY_ESCALATION'] as const).map((t) => (
+          {(['', 'SLA_BREACH', 'MISSED_BATCH', 'DELAY_ESCALATION', 'RESULT_COMPLETED'] as const).map((t) => (
             <button
               key={t}
               className="btn btn-ghost btn-sm"

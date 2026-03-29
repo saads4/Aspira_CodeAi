@@ -1,29 +1,29 @@
 'use client';
 import Topbar from '@/components/layout/Topbar';
 
-import { ScanLine, ArrowRight, FlaskConical, Clock } from 'lucide-react';
+import { CheckCircle, ArrowRight, Clock, CheckSquare } from 'lucide-react';
 import { useUIStore } from '@/store/slices/uiSlice';
 
-export default function ScanPage() {
-  const { setScanDrawerOpen } = useUIStore();
+export default function ResultPage() {
+  const { setResultDrawerOpen } = useUIStore();
 
   const TIPS = [
-    { icon: '🧪', title: 'Single Sample', desc: 'Submit one sample with a unique Sample ID and test name' },
-    { icon: '📦', title: 'Batch Submit', desc: 'POST /webhook with a tests:[] array for multi-test payloads' },
-    { icon: '⏱️', title: 'ETA Computation', desc: 'TAT is calculated from EDOS schedule + batch window in IST' },
-    { icon: '🚨', title: 'Alerts', desc: 'Missed batch and SLA breach alerts fire automatically post-processing' },
+    { icon: '✅', title: 'Mark Complete', desc: 'Submit sample_id, test_name, and result_ready_at to mark samples as completed' },
+    { icon: '📊', title: 'TAT Calculation', desc: 'Actual TAT minutes are computed from received_at to result_ready_at' },
+    { icon: '🎯', title: 'SLA Metrics', desc: 'SLA breach/achievement flags are updated automatically' },
+    { icon: '🔄', title: 'Worker Processing', desc: 'Result webhook triggers background worker processing' },
   ];
 
   return (
     <div className="layout-main">
-      <Topbar title="Scan / Submit Sample" />
+      <Topbar title="Complete / Result Entry" />
       <main className="page-content">
         {/* Hero card */}
         <div
           className="card"
           style={{
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(99,102,241,0.08) 100%)',
-            borderColor: 'rgba(59,130,246,0.25)',
+            background: 'linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(16,185,129,0.08) 100%)',
+            borderColor: 'rgba(34,197,94,0.25)',
             borderRadius: 'var(--radius-xl)',
             padding: '40px 48px',
             marginBottom: 24,
@@ -36,32 +36,31 @@ export default function ScanPage() {
             <div className="flex items-center gap-3" style={{ marginBottom: 12 }}>
               <div style={{
                 width: 48, height: 48,
-                background: 'var(--brand-primary)',
+                background: 'var(--color-normal)',
                 borderRadius: 'var(--radius-md)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <ScanLine size={24} color="#fff" />
+                <CheckCircle size={24} color="#fff" />
               </div>
               <div>
                 <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: -0.5 }}>
-                  Barcode Scan Interface
+                  Result Entry Interface
                 </h2>
-                <div className="text-xs text-muted">Manual sample submission + TAT queue</div>
+                <div className="text-xs text-muted">Mark samples as completed with TAT calculation</div>
               </div>
             </div>
             <p className="text-secondary text-sm" style={{ lineHeight: 1.7, marginBottom: 20 }}>
-              Submit a lab sample for ETA computation, batch assignment, and SLA monitoring.
-              The system will automatically find the next valid EDOS batch window and compute
-              the turnaround time in IST.
+              Submit completed sample results to calculate actual turnaround time and update SLA metrics.
+              The system will automatically compute TAT from sample receipt to result completion.
             </p>
             <button
               className="btn btn-primary"
-              onClick={() => setScanDrawerOpen(true)}
-              id="open-scan-drawer-btn"
+              onClick={() => setResultDrawerOpen(true)}
+              id="open-result-drawer-btn"
               style={{ padding: '11px 24px', fontSize: '0.9rem' }}
             >
-              <ScanLine size={16} />
-              Open Scan Interface
+              <CheckCircle size={16} />
+              Mark Sample Complete
               <ArrowRight size={14} />
             </button>
           </div>
@@ -70,16 +69,16 @@ export default function ScanPage() {
             <div style={{
               width: 200, height: 200,
               background: 'var(--bg-elevated)',
-              border: '2px dashed var(--border-default)',
+              border: '2px dashed var(--color-normal)',
               borderRadius: 'var(--radius-lg)',
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
               gap: 10,
               color: 'var(--text-muted)',
             }}>
-              <FlaskConical size={40} color="var(--brand-primary)" strokeWidth={1.2} />
+              <CheckSquare size={40} color="var(--color-normal)" strokeWidth={1.2} />
               <div className="text-xs text-center" style={{ lineHeight: 1.5 }}>
-                Scan barcode or<br/>enter sample ID manually
+                Enter sample ID or<br/>scan barcode to complete
               </div>
             </div>
           </div>
@@ -119,17 +118,13 @@ export default function ScanPage() {
               lineHeight: 1.7,
               color: 'var(--text-secondary)',
             }}
-          >{`POST http://localhost:3000/webhook
+          >{`POST http://localhost:3000/webhook/result
 Content-Type: application/json
 
 {
   "sample_id": "SAP-2026-00142",
   "test_name": "test_1",
-  "received_at": "2026-03-28T14:30:00+05:30",
-  "agreed_tat_hours": 24,
-  "priority_tat": "NORMAL",
-  "method": "EIA",
-  "specimen_type": "Serum"
+  "result_ready_at": "2026-03-29T14:30:00+05:30"
 }`}
           </pre>
         </div>

@@ -198,7 +198,7 @@ File: .env (copy from .env.example)
 
   MONGO_URI        = mongodb connection string (Atlas or local)
   REDIS_URL        = redis connection string (Redis Cloud or local)
-  PORT             = 3000 (Express server port)
+  PORT             = 3001 (Express server port)
   SMTP_HOST        = (optional) SMTP server for email alerts
   SMTP_PORT        = 587
   SMTP_USER        = (optional) SMTP username
@@ -250,7 +250,7 @@ ALERT MODEL (models/Alert.js):
 7. ALL API ENDPOINTS
 ================================================================================
 
-BASE URL: http://localhost:3000
+BASE URL: http://localhost:3001
 
 ───── HEALTH ─────
   GET /health
@@ -451,7 +451,7 @@ VERIFY STARTUP:
     [SUCCESS] MongoDB connected
     [INFO]    Redis connected
     [SUCCESS] EDOS loaded from JSON: XXXX test records
-    [SUCCESS] 🚀 TAT Monitor API running on http://localhost:3000
+    [SUCCESS] 🚀 TAT Monitor API running on http://localhost:3001
     [INFO]    🏭 Worker started — listening to "sample-processing" queue
     [INFO]    🏭 Worker started — listening to "result-processing" queue
 
@@ -469,20 +469,20 @@ npm scripts:
 14. TESTING EVERY FEATURE (CURL COMMANDS)
 ================================================================================
 
-NOTE: Run "npm run dev" first. All commands use http://localhost:3000.
+NOTE: Run "npm run dev" first. All commands use http://localhost:3001.
       Use PowerShell. For Linux/Mac, remove backticks and use single-line.
 
 ─────────────────────────────────────────────────
 TEST 1: Health Check
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/health
+  curl http://localhost:3001/health
 
   Expected: { "status": "ok", "uptime": <number> }
 
 ─────────────────────────────────────────────────
 TEST 2: Submit a Single Sample via Webhook
 ─────────────────────────────────────────────────
-  curl -X POST http://localhost:3000/webhook `
+  curl -X POST http://localhost:3001/webhook `
     -H "Content-Type: application/json" `
     -d "{\"sample_id\":\"TEST-001\",\"test_name\":\"CBC\",\"method\":\"Automated\",\"specimen_type\":\"Blood\",\"received_at\":\"2026-03-28T10:00:00.000Z\",\"agreed_tat_hours\":24}"
 
@@ -503,7 +503,7 @@ TEST 2: Submit a Single Sample via Webhook
 ─────────────────────────────────────────────────
 TEST 3: Submit Multiple Tests via Webhook
 ─────────────────────────────────────────────────
-  curl -X POST http://localhost:3000/webhook `
+  curl -X POST http://localhost:3001/webhook `
     -H "Content-Type: application/json" `
     -d "{\"tests\":[{\"sample_id\":\"TEST-002\",\"test_name\":\"LFT\",\"method\":\"Photometry\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T09:00:00.000Z\",\"agreed_tat_hours\":48},{\"sample_id\":\"TEST-003\",\"test_name\":\"KFT\",\"method\":\"Photometry\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T11:00:00.000Z\",\"agreed_tat_hours\":24}]}"
 
@@ -512,7 +512,7 @@ TEST 3: Submit Multiple Tests via Webhook
 ─────────────────────────────────────────────────
 TEST 4: Validation Error (missing fields)
 ─────────────────────────────────────────────────
-  curl -X POST http://localhost:3000/webhook `
+  curl -X POST http://localhost:3001/webhook `
     -H "Content-Type: application/json" `
     -d "{\"sample_id\":\"BAD-001\"}"
 
@@ -525,7 +525,7 @@ TEST 4: Validation Error (missing fields)
 ─────────────────────────────────────────────────
 TEST 5: Validation Error (bad agreed_tat_hours)
 ─────────────────────────────────────────────────
-  curl -X POST http://localhost:3000/webhook `
+  curl -X POST http://localhost:3001/webhook `
     -H "Content-Type: application/json" `
     -d "{\"sample_id\":\"BAD-002\",\"test_name\":\"X\",\"method\":\"Y\",\"specimen_type\":\"Z\",\"received_at\":\"2026-03-28T10:00:00Z\",\"agreed_tat_hours\":-5}"
 
@@ -536,7 +536,7 @@ TEST 6: Submit Result (after sample processed)
 ─────────────────────────────────────────────────
   Wait a few seconds after TEST 2 for sample to be processed, then:
 
-  curl -X POST http://localhost:3000/webhook/result `
+  curl -X POST http://localhost:3001/webhook/result `
     -H "Content-Type: application/json" `
     -d "{\"sample_id\":\"TEST-001\",\"test_name\":\"CBC\",\"result_ready_at\":\"2026-03-28T18:30:00.000Z\"}"
 
@@ -555,7 +555,7 @@ TEST 7: Duplicate Result (idempotency)
 ─────────────────────────────────────────────────
 TEST 8: Result Validation Error
 ─────────────────────────────────────────────────
-  curl -X POST http://localhost:3000/webhook/result `
+  curl -X POST http://localhost:3001/webhook/result `
     -H "Content-Type: application/json" `
     -d "{\"sample_id\":\"TEST-001\"}"
 
@@ -567,55 +567,55 @@ TEST 8: Result Validation Error
 ─────────────────────────────────────────────────
 TEST 9: List All Samples
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/api/samples
+  curl http://localhost:3001/api/samples
 
   Expected: { "status":"ok", "page":1, "limit":50, "total":<N>, "totalPages":<N>, "data":[...] }
 
 ─────────────────────────────────────────────────
 TEST 10: Filter Samples by Status
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/samples?status=assigned"
-  curl "http://localhost:3000/api/samples?status=completed"
-  curl "http://localhost:3000/api/samples?status=delayed"
+  curl "http://localhost:3001/api/samples?status=assigned"
+  curl "http://localhost:3001/api/samples?status=completed"
+  curl "http://localhost:3001/api/samples?status=delayed"
 
 ─────────────────────────────────────────────────
 TEST 11: Filter Samples with Breach
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/samples?breach=true"
+  curl "http://localhost:3001/api/samples?breach=true"
 
 ─────────────────────────────────────────────────
 TEST 12: Filter Missed Batch Samples
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/samples?missed=true"
+  curl "http://localhost:3001/api/samples?missed=true"
 
 ─────────────────────────────────────────────────
 TEST 13: Search Samples by Test Name
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/samples?test_name=CBC"
+  curl "http://localhost:3001/api/samples?test_name=CBC"
 
 ─────────────────────────────────────────────────
 TEST 14: Paginated Samples
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/samples?page=1&limit=5"
+  curl "http://localhost:3001/api/samples?page=1&limit=5"
 
 ─────────────────────────────────────────────────
 TEST 15: Get Single Sample Detail
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/api/samples/TEST-001
+  curl http://localhost:3001/api/samples/TEST-001
 
   Expected: { "status":"ok", "data": { sample_id: "TEST-001", ... all fields ... } }
 
 ─────────────────────────────────────────────────
 TEST 16: Sample Not Found
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/api/samples/NONEXISTENT
+  curl http://localhost:3001/api/samples/NONEXISTENT
 
   Expected (404): { "status":"error", "message":"Sample not found" }
 
 ─────────────────────────────────────────────────
 TEST 17: Dashboard Stats
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/api/stats
+  curl http://localhost:3001/api/stats
 
   Expected: Full stats with counts (total, pending, assigned, delayed, breached, completed,
   error, missed_batch), result_metrics, recent_breaches, recent_missed
@@ -623,53 +623,53 @@ TEST 17: Dashboard Stats
 ─────────────────────────────────────────────────
 TEST 18: Batch Queues
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/api/batches
+  curl http://localhost:3001/api/batches
 
   Expected: { "status":"ok", "count":<N>, "data":[{ batch_id, total_samples, ... }] }
 
 ─────────────────────────────────────────────────
 TEST 19: Batch Queues Filtered by Date
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/batches?date=2026-03-28"
+  curl "http://localhost:3001/api/batches?date=2026-03-28"
 
 ─────────────────────────────────────────────────
 TEST 20: List Alerts
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/api/alerts
+  curl http://localhost:3001/api/alerts
 
   Expected: Paginated list of all alerts
 
 ─────────────────────────────────────────────────
 TEST 21: Filter Alerts by Type
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/alerts?type=SLA_BREACH"
-  curl "http://localhost:3000/api/alerts?type=MISSED_BATCH"
-  curl "http://localhost:3000/api/alerts?type=RESULT_COMPLETED"
-  curl "http://localhost:3000/api/alerts?type=DELAY_ESCALATION"
+  curl "http://localhost:3001/api/alerts?type=SLA_BREACH"
+  curl "http://localhost:3001/api/alerts?type=MISSED_BATCH"
+  curl "http://localhost:3001/api/alerts?type=RESULT_COMPLETED"
+  curl "http://localhost:3001/api/alerts?type=DELAY_ESCALATION"
 
 ─────────────────────────────────────────────────
 TEST 22: Filter Alerts by Sample ID
 ─────────────────────────────────────────────────
-  curl "http://localhost:3000/api/alerts?sample_id=TEST-001"
+  curl "http://localhost:3001/api/alerts?sample_id=TEST-001"
 
 ─────────────────────────────────────────────────
 TEST 23: Alert Summary (counts by type)
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/api/alerts/summary
+  curl http://localhost:3001/api/alerts/summary
 
   Expected: { "status":"ok", "data": { "SLA_BREACH": 2, "MISSED_BATCH": 1, ... } }
 
 ─────────────────────────────────────────────────
 TEST 24: 404 Route
 ─────────────────────────────────────────────────
-  curl http://localhost:3000/nonexistent
+  curl http://localhost:3001/nonexistent
 
   Expected (404): { "status":"error", "message":"Route GET /nonexistent not found" }
 
 ─────────────────────────────────────────────────
 TEST 25: HIGH Priority Sample
 ─────────────────────────────────────────────────
-  curl -X POST http://localhost:3000/webhook `
+  curl -X POST http://localhost:3001/webhook `
     -H "Content-Type: application/json" `
     -d "{\"sample_id\":\"URGENT-001\",\"test_name\":\"Troponin I\",\"method\":\"CLIA\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T23:00:00.000Z\",\"agreed_tat_hours\":4,\"priority_tat\":\"HIGH\"}"
 
@@ -678,7 +678,7 @@ TEST 25: HIGH Priority Sample
 ─────────────────────────────────────────────────
 TEST 26: Custom Batch Windows Override
 ─────────────────────────────────────────────────
-  curl -X POST http://localhost:3000/webhook `
+  curl -X POST http://localhost:3001/webhook `
     -H "Content-Type: application/json" `
     -d "{\"sample_id\":\"CUSTOM-001\",\"test_name\":\"Special Test\",\"method\":\"Manual\",\"specimen_type\":\"Urine\",\"received_at\":\"2026-03-28T08:00:00.000Z\",\"agreed_tat_hours\":12,\"batch_windows\":[{\"days\":[1,3,5],\"cutoff_hour\":14,\"cutoff_minute\":0}]}"
 
@@ -688,26 +688,26 @@ TEST 26: Custom Batch Windows Override
 TEST 27: End-to-End Flow (Complete Lifecycle)
 ─────────────────────────────────────────────────
   Step 1: Submit sample
-    curl -X POST http://localhost:3000/webhook -H "Content-Type: application/json" -d "{\"sample_id\":\"E2E-001\",\"test_name\":\"TSH\",\"method\":\"CLIA\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T10:00:00.000Z\",\"agreed_tat_hours\":24}"
+    curl -X POST http://localhost:3001/webhook -H "Content-Type: application/json" -d "{\"sample_id\":\"E2E-001\",\"test_name\":\"TSH\",\"method\":\"CLIA\",\"specimen_type\":\"Serum\",\"received_at\":\"2026-03-28T10:00:00.000Z\",\"agreed_tat_hours\":24}"
 
   Step 2: Wait 3 seconds, then verify sample was processed
-    curl http://localhost:3000/api/samples/E2E-001
+    curl http://localhost:3001/api/samples/E2E-001
 
   Step 3: Check stats
-    curl http://localhost:3000/api/stats
+    curl http://localhost:3001/api/stats
 
   Step 4: Submit result
-    curl -X POST http://localhost:3000/webhook/result -H "Content-Type: application/json" -d "{\"sample_id\":\"E2E-001\",\"test_name\":\"TSH\",\"result_ready_at\":\"2026-03-28T20:00:00.000Z\"}"
+    curl -X POST http://localhost:3001/webhook/result -H "Content-Type: application/json" -d "{\"sample_id\":\"E2E-001\",\"test_name\":\"TSH\",\"result_ready_at\":\"2026-03-28T20:00:00.000Z\"}"
 
   Step 5: Wait 3 seconds, verify completion
-    curl http://localhost:3000/api/samples/E2E-001
+    curl http://localhost:3001/api/samples/E2E-001
     → status should be "completed", actual_tat_minutes populated
 
   Step 6: Check alerts
-    curl "http://localhost:3000/api/alerts?sample_id=E2E-001"
+    curl "http://localhost:3001/api/alerts?sample_id=E2E-001"
 
   Step 7: Check updated stats
-    curl http://localhost:3000/api/stats
+    curl http://localhost:3001/api/stats
     → completed count should increase, result_metrics should update
 
 ================================================================================

@@ -35,6 +35,8 @@ router.get('/', async (req, res, next) => {
       Sample.countDocuments(filter),
     ]);
 
+    console.log(`SAMPLES API: filter=${JSON.stringify(filter)}, total=${total}, samples.length=${samples.length}`);
+
     res.json({
       status: 'ok',
       page: parseInt(page, 10),

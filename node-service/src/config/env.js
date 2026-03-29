@@ -4,7 +4,7 @@ require('dotenv').config();
 module.exports = {
   MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/tat_monitoring',
   REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
-  PORT: parseInt(process.env.PORT, 10) || 3000,
+  PORT: parseInt(process.env.PORT, 10) || 3001,
 
   // SMTP (optional)
   SMTP_HOST: process.env.SMTP_HOST || '',

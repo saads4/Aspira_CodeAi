@@ -63,7 +63,7 @@ npm install
 2.  Open `.env` and update the values:
     - `MONGO_URI`: Paste your MongoDB Atlas connection string here.
     - `REDIS_URL`: Use `redis://localhost:6379` if running locally, or your cloud URL.
-    - `PORT`: Default is `3000`.
+    - `PORT`: Default is `3001`.
     - `SMTP_...`: (Optional) Fill these if you want email alerts. Otherwise, leave them blank.
 
 ---
@@ -119,7 +119,7 @@ npm install
 The frontend needs to know where to reach the backend API. Create a `.env.local` file in the frontend directory:
 ```bash
 # frontend/.env.local
-NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 ### Step 3: Start the Frontend Development Server
@@ -181,7 +181,7 @@ npm run dev
 ### Step 1: Health Check
 Verify the server is up:
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3001/health
 ```
 
 ### Step 2: Submit a Test Sample
@@ -189,7 +189,7 @@ Use `curl` or a tool like Postman to send a webhook.
 
 **Scenario A: Normal Sample (On time)**
 ```bash
-curl -X POST http://localhost:3000/webhook \
+curl -X POST http://localhost:3001/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "sample_id": "SAP-001",
@@ -205,7 +205,7 @@ curl -X POST http://localhost:3000/webhook \
 **Scenario B: Missed Batch (Late arrival)**
 Receive a sample after the 6:00 PM cutoff for `test_1`:
 ```bash
-curl -X POST http://localhost:3000/webhook \
+curl -X POST http://localhost:3001/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "sample_id": "SAP-002",
@@ -232,9 +232,9 @@ Open **MongoDB Atlas > Database > Browse Collections**.
 - Look at the `alerts` collection: You should see entries for every missed batch or breach.
 
 ### 3. Use the Backend APIs
-- **List Samples**: `GET http://localhost:3000/api/samples`
-- **View Stats**: `GET http://localhost:3000/api/stats`
-- **View Recent Alerts**: `GET http://localhost:3000/api/alerts`
+- **List Samples**: `GET http://localhost:3001/api/samples`
+- **View Stats**: `GET http://localhost:3001/api/stats`
+- **View Recent Alerts**: `GET http://localhost:3001/api/alerts`
 
 ### 4. Test the Frontend Dashboard
 Open your browser and navigate to `http://localhost:3001`:
@@ -261,10 +261,10 @@ Open your browser and navigate to `http://localhost:3001`:
 
 ### Frontend Issues
 - **Frontend won't start**: Ensure you're in the `frontend` directory and have run `npm install`.
-- **API Connection Error**: Verify the backend is running on `http://localhost:3000` and the `NEXT_PUBLIC_API_URL` in `frontend/.env.local` is correct.
+- **API Connection Error**: Verify the backend is running on `http://localhost:3001` and the `NEXT_PUBLIC_API_URL` in `frontend/.env.local` is correct.
 - **Real-time updates not working**: Check that Socket.io is properly configured and the backend WebSocket connection is established.
 - **Blank pages or errors**: Check the browser console for JavaScript errors and ensure all dependencies are installed.
 
 ### Port Conflicts
-- If port 3000 is occupied: Change the backend `PORT` in `node-service/.env`
+- If port 3001 is occupied: Change the backend `PORT` in `node-service/.env`
 - If port 3001 is occupied: Start the frontend with `npm run dev -- -p 3002` and update `NEXT_PUBLIC_API_URL` accordingly

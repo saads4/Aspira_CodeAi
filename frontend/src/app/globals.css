@@ -520,6 +520,14 @@ body {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 3px var(--brand-glow);
 }
+.input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.1) !important;
+}
+.input-error:focus {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.2) !important;
+}
 
 .select { cursor: pointer; appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
@@ -835,6 +843,7 @@ body {
 .text-xs  { font-size: 0.72rem; }
 .uppercase { text-transform: uppercase; letter-spacing: 0.5px; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.text-danger { color: #ef4444; }
 
 /* ─── Chart container ────────────────────────────────────────────────────── */
 .chart-wrap {

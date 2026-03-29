@@ -7,12 +7,14 @@ interface UIState {
   connectionStatus: ConnectionStatus;
   activeSampleId: string | null;
   scanDrawerOpen: boolean;
+  resultDrawerOpen: boolean;
 
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
   setConnectionStatus: (s: ConnectionStatus) => void;
   setActiveSampleId: (id: string | null) => void;
   setScanDrawerOpen: (open: boolean) => void;
+  setResultDrawerOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -20,10 +22,12 @@ export const useUIStore = create<UIState>((set) => ({
   connectionStatus: 'disconnected',
   activeSampleId: null,
   scanDrawerOpen: false,
+  resultDrawerOpen: false,
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   setActiveSampleId: (activeSampleId) => set({ activeSampleId }),
   setScanDrawerOpen: (scanDrawerOpen) => set({ scanDrawerOpen }),
+  setResultDrawerOpen: (resultDrawerOpen) => set({ resultDrawerOpen }),
 }));

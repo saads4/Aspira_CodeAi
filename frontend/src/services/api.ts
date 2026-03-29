@@ -62,6 +62,7 @@ export const alertsService = {
   list(filters: Partial<AlertFilters>): Promise<PaginatedResponse<Alert>> {
     const qs = buildQuery({
       type: filters.type,
+      sample_id: filters.sample_id,
       acknowledged:
         filters.acknowledged != null ? String(filters.acknowledged) : undefined,
       page: filters.page ?? 1,
@@ -85,6 +86,21 @@ export const webhookService = {
       count: number;
       sample_ids: string[];
     }>('/webhook', payload);
+  },
+};
+
+// ─── Result Service ───────────────────────────────────────────────────────────
+
+export const resultService = {
+  submit(payload: {
+    sample_id: string;
+    test_name: string;
+    result_ready_at: string;
+  }) {
+    return apiClient.post<{
+      status: string;
+      message: string;
+    }>('/webhook/result', payload);
   },
 };
 

@@ -3,10 +3,11 @@ import { AlertTriangle, Clock, Zap } from 'lucide-react';
 import type { Alert } from '@/types';
 import { fmtRelative, fmtTime, fmtOverage } from '@/utils/helpers';
 
-const TYPE_CONFIG = {
+const TYPE_CONFIG: Record<string, { icon: string; cls: string; label: string; color: string }> = {
   MISSED_BATCH:      { icon: '⚠️',  cls: 'badge-warning',  label: 'Missed Batch',      color: 'var(--color-warning)' },
   SLA_BREACH:        { icon: '🚨',  cls: 'badge-critical', label: 'SLA Breach',         color: 'var(--color-critical)' },
   DELAY_ESCALATION:  { icon: '🟠',  cls: 'badge-delayed',  label: 'Delay Escalation',   color: 'var(--color-delayed)' },
+  RESULT_COMPLETED:  { icon: '✅',  cls: 'badge-normal',   label: 'Result Completed',   color: 'var(--color-normal)' },
 };
 
 interface Props {

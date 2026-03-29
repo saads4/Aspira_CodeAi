@@ -21,6 +21,7 @@ const KPI_DEFS: KpiDef[] = [
   { key: 'delayed',     label: 'Delayed',       variant: 'delayed',  icon: '🟠' },
   { key: 'breached',    label: 'SLA Breach',    variant: 'critical', icon: '🚨' },
   { key: 'missed_batch',label: 'Missed Batch',  variant: 'warning',  icon: '⚠️'  },
+  { key: 'completed',   label: 'Completed',     variant: 'normal',   icon: '✅' },
   { key: 'error',       label: 'Errors',        variant: 'neutral',  icon: '🔴' },
 ];
 

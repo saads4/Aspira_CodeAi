@@ -70,6 +70,8 @@ async function processResult(job) {
     { new: true }
   );
 
+  logger.info(`MongoDB update result for ${sample_id} (${test_name}): status=${updateFields.status}, actual_tat_minutes=${actual_tat_minutes}`);
+
   logger.success(
     `Result completed: ${sample_id} (${test_name}) | ` +
     `Actual TAT: ${actual_tat_minutes} min | ` +

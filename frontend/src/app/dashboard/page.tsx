@@ -8,6 +8,7 @@ import SampleDetailDrawer from '@/components/samples/SampleDetailDrawer';
 import { useStatsStore } from '@/store/slices/statsSlice';
 import { useSamplesStore } from '@/store/slices/samplesSlice';
 import type { Sample, SampleStatus } from '@/types';
+import { fmtOverage } from '@/utils/helpers';
 
 export default function DashboardPage() {
   const stats        = useStatsStore((s) => s.data);
@@ -91,6 +92,50 @@ export default function DashboardPage() {
           </div>
         </section>
 
+        {/* Result Metrics */}
+        {stats?.result_metrics && stats.result_metrics.total_completed > 0 && (
+          <section aria-label="Result metrics" style={{ marginBottom: 24 }}>
+            <div className="section-heading" style={{ marginBottom: 10 }}>
+              <span className="section-title">Result Metrics</span>
+              <span className="text-xs text-muted">{stats.result_metrics.total_completed} completed samples</span>
+            </div>
+            <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+              <div className="kpi-card normal">
+                <div className="kpi-icon" style={{ background: 'rgba(34,197,94,0.12)' }}>🎯</div>
+                <div className="kpi-label">SLA Compliance</div>
+                <div className="kpi-value normal">
+                  {stats.result_metrics.sla_compliance_rate != null
+                    ? `${stats.result_metrics.sla_compliance_rate}%`
+                    : '—'}
+                </div>
+              </div>
+              <div className="kpi-card neutral">
+                <div className="kpi-icon" style={{ background: 'rgba(255,255,255,0.06)' }}>⏱️</div>
+                <div className="kpi-label">Avg Actual TAT</div>
+                <div className="kpi-value">
+                  {stats.result_metrics.avg_actual_tat != null
+                    ? fmtOverage(Math.round(stats.result_metrics.avg_actual_tat))
+                    : '—'}
+                </div>
+              </div>
+              <div className="kpi-card neutral">
+                <div className="kpi-icon" style={{ background: 'rgba(255,255,255,0.06)' }}>📊</div>
+                <div className="kpi-label">Prediction Error</div>
+                <div className="kpi-value">
+                  {stats.result_metrics.avg_prediction_error != null
+                    ? `${stats.result_metrics.avg_prediction_error > 0 ? '+' : ''}${Math.round(stats.result_metrics.avg_prediction_error)}m`
+                    : '—'}
+                </div>
+              </div>
+              <div className="kpi-card normal">
+                <div className="kpi-icon" style={{ background: 'rgba(34,197,94,0.12)' }}>✅</div>
+                <div className="kpi-label">Total Completed</div>
+                <div className="kpi-value normal">{stats.result_metrics.total_completed}</div>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Sample Table */}
         <section aria-label="Sample pipeline">
           <div className="section-heading">
@@ -121,6 +166,7 @@ export default function DashboardPage() {
               <option value="processing">Processing</option>
               <option value="assigned">Assigned</option>
               <option value="delayed">Delayed</option>
+              <option value="completed">Completed</option>
               <option value="error">Error</option>
             </select>
             <select
@@ -149,6 +195,35 @@ export default function DashboardPage() {
             onSelect={setSelected}
             loading={samplesLoading}
           />
+
+          {/* Pagination */}
+          {total > filters.limit && (
+            <div className="flex justify-between items-center" style={{ marginTop: 16, padding: '8px 0' }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={filters.page <= 1}
+                onClick={() => {
+                  setFilters({ page: filters.page - 1 });
+                  fetchSamples();
+                }}
+              >
+                ← Previous
+              </button>
+              <span className="text-xs text-muted">
+                Page {filters.page} of {Math.ceil(total / filters.limit)}
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={filters.page >= Math.ceil(total / filters.limit)}
+                onClick={() => {
+                  setFilters({ page: filters.page + 1 });
+                  fetchSamples();
+                }}
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </section>
       </main>
 

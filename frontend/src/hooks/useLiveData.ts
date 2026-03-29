@@ -27,6 +27,8 @@ export function useLiveData(): void {
 
   // Track last known sample IDs to detect new inserts vs updates
   const knownSampleIds = useRef<Set<string>>(new Set());
+  // Track current state of each sample to detect status changes
+  const knownSampleStatuses = useRef<Map<string, string>>(new Map());
   // Track last alerts ID set to detect new alerts
   const knownAlertIds = useRef<Set<string>>(new Set());
 
@@ -37,7 +39,15 @@ export function useLiveData(): void {
     const statsPoller = new SmartPoller<SingleResponse<Stats>>({
       interval: STATS_INTERVAL,
       fetcher: () => statsService.get(),
-      onData: (res) => setStatsData(res.data),
+      onData: (res) => {
+        // Add null safety check
+        if (!res || !res.data) {
+          console.error('STATS POLLER: Invalid stats response', res);
+          return;
+        }
+        console.log('STATS POLLER: Received stats data:', res.data);
+        setStatsData(res.data);
+      },
       onStatusChange: setConnectionStatus,
     });
 
@@ -46,14 +56,40 @@ export function useLiveData(): void {
       interval: SAMPLES_INTERVAL,
       fetcher: () => samplesService.list(samplesFilters),
       onData: (res) => {
+        // Add null safety check
+        if (!res || !res.data) {
+          console.error('SAMPLES POLLER: Invalid samples response', res);
+          return;
+        }
+        console.log('SAMPLES POLLER: Received samples:', res.data.length, 'samples');
+        const isFirstRun = knownSampleIds.current.size === 0;
+        
         for (const sample of res.data) {
+          const sampleKey = `${sample.sample_id}:${sample.test_name}`;
+          const previousStatus = knownSampleStatuses.current.get(sampleKey);
+          
           if (knownSampleIds.current.has(sample.sample_id)) {
-            applyUpdate(sample);
+            // Known sample - check if status changed
+            if (previousStatus !== sample.status) {
+              console.log(`SAMPLES POLLER: Status changed for ${sample.sample_id}: ${previousStatus} → ${sample.status}`);
+              // Status changed (e.g., pending → completed)
+              applyUpdate(sample);
+              knownSampleStatuses.current.set(sampleKey, sample.status);
+            }
           } else {
+            // New sample - add to tracking
             knownSampleIds.current.add(sample.sample_id);
-            applyInsert(sample);
+            knownSampleStatuses.current.set(sampleKey, sample.status);
+            
+            // Only apply as insert on first run, otherwise it's a new sample
+            if (!isFirstRun) {
+              console.log(`SAMPLES POLLER: New sample: ${sample.sample_id} with status ${sample.status}`);
+              applyInsert(sample);
+            }
           }
         }
+        
+        // On first run, we don't need to apply inserts since the data is already in the store
       },
     });
 
@@ -62,6 +98,11 @@ export function useLiveData(): void {
       interval: ALERTS_INTERVAL,
       fetcher: () => alertsService.list({ limit: 20, page: 1 }),
       onData: (res) => {
+        // Add null safety check
+        if (!res || !res.data) {
+          console.error('ALERTS POLLER: Invalid alerts response', res);
+          return;
+        }
         for (const alert of res.data) {
           if (!knownAlertIds.current.has(alert._id)) {
             knownAlertIds.current.add(alert._id);

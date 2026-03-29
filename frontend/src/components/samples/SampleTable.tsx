@@ -4,6 +4,10 @@ import type { Sample } from '@/types';
 import { getSampleUrgency, fmtTime, fmtRelative, fmtOverage } from '@/utils/helpers';
 import UrgencyBadge from '@/components/ui/UrgencyBadge';
 import StatusBadge from '@/components/ui/StatusBadge';
+import { CheckCircle } from 'lucide-react';
+import { resultService } from '@/services/api';
+import { useStatsStore } from '@/store/slices/statsSlice';
+import toast from 'react-hot-toast';
 
 interface Props {
   samples: Sample[];
@@ -13,6 +17,27 @@ interface Props {
 
 function SampleRow({ sample, onSelect }: { sample: Sample; onSelect: (s: Sample) => void }) {
   const urgency = getSampleUrgency(sample);
+
+  const handleMarkComplete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (sample.status === 'completed') {
+      toast.error('Sample is already completed');
+      return;
+    }
+    
+    try {
+      await resultService.submit({
+        sample_id: sample.sample_id,
+        test_name: sample.test_name,
+        result_ready_at: new Date().toISOString(),
+      });
+      toast.success('Sample marked as completed');
+      await useStatsStore.getState().fetch();
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? 'Failed to mark complete');
+    }
+  };
+
   return (
     <tr
       className={`row-${urgency}`}
@@ -64,6 +89,20 @@ function SampleRow({ sample, onSelect }: { sample: Sample; onSelect: (s: Sample)
       <td>
         <div className="text-xs text-muted">{fmtRelative(sample.updated_at)}</div>
       </td>
+      <td>
+        <button
+          className="btn btn-ghost btn-icon btn-sm"
+          onClick={handleMarkComplete}
+          disabled={sample.status === 'completed'}
+          title={sample.status === 'completed' ? 'Already completed' : 'Mark as completed'}
+          style={{ 
+            opacity: sample.status === 'completed' ? 0.5 : 1,
+            cursor: sample.status === 'completed' ? 'not-allowed' : 'pointer'
+          }}
+        >
+          <CheckCircle size={14} color={sample.status === 'completed' ? 'var(--color-muted)' : 'var(--color-normal)'} />
+        </button>
+      </td>
     </tr>
   );
 }
@@ -78,7 +117,7 @@ function SkeletonRows() {
     <>
       {Array.from({ length: 6 }).map((_, i) => (
         <tr key={i}>
-          {Array.from({ length: 8 }).map((_, j) => (
+          {Array.from({ length: 9 }).map((_, j) => (
             <td key={j}>
               <div className="skeleton" style={{ height: 16, borderRadius: 4, width: j === 0 ? 120 : 80 }} />
             </td>
@@ -103,6 +142,7 @@ export default function SampleTable({ samples, onSelect, loading }: Props) {
             <th>Overage</th>
             <th>Priority</th>
             <th>Updated</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -110,7 +150,7 @@ export default function SampleTable({ samples, onSelect, loading }: Props) {
             <SkeletonRows />
           ) : samples.length === 0 ? (
             <tr>
-              <td colSpan={8}>
+              <td colSpan={9}>
                 <div className="empty-state">
                   <div className="empty-state-icon">🧪</div>
                   <div className="empty-state-title">No samples found</div>

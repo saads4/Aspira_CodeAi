@@ -6,6 +6,7 @@ const MAP: Record<SampleStatus, { label: string; cls: string }> = {
   processing: { label: 'Processing', cls: 'badge badge-info'     },
   assigned:   { label: 'Assigned',   cls: 'badge badge-normal'   },
   delayed:    { label: 'Delayed',    cls: 'badge badge-delayed'  },
+  completed:  { label: 'Completed',  cls: 'badge badge-normal'   },
   error:      { label: 'Error',      cls: 'badge badge-error'    },
 };
 

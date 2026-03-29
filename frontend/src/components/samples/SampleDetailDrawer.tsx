@@ -171,6 +171,28 @@ export default function SampleDetailDrawer({ sample, onClose }: Props) {
             <DetailRow label="Batch Run"     value={fmtTime(sample.batch_run_start)} />
             <DetailRow label="Created"       value={fmtTime(sample.created_at)} />
             <DetailRow label="Last Updated"  value={fmtTime(sample.updated_at)} />
+
+            {sample.status === 'completed' && (
+              <>
+                <div className="divider" style={{ margin: '12px 0' }} />
+                <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
+                  <CheckCircle size={14} color="var(--color-normal)" />
+                  <span className="text-xs text-muted font-600 uppercase">Completion Analysis</span>
+                </div>
+                <DetailRow label="Result Ready"   value={fmtTime(sample.result_ready_at)} />
+                <DetailRow label="Actual TAT"     value={fmtOverage(sample.actual_tat_minutes)} />
+                <DetailRow label="SLA Status"     value={
+                  sample.completed_within_sla 
+                    ? <span className="text-normal font-600">Within SLA</span>
+                    : <span className="text-critical font-600">Breached SLA</span>
+                } />
+                <DetailRow label="Prediction Err" value={
+                  sample.prediction_error_minutes != null
+                    ? `${sample.prediction_error_minutes > 0 ? '+' : ''}${sample.prediction_error_minutes}m`
+                    : '—'
+                } />
+              </>
+            )}
           </div>
 
           {/* Success indicator if clean */}

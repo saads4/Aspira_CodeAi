@@ -69,6 +69,20 @@ async function start() {
     logger.info('  GET  /api/alerts       — recent alerts');
     logger.info('  GET  /health           — health check');
   });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error(`❌ Port ${PORT} is already in use.`);
+      logger.info(`Possible fixes:`);
+      logger.info(`1. Check if another instance of the backend or frontend is running.`);
+      logger.info(`2. Kill the process using port ${PORT}.`);
+      logger.info(`3. Change the PORT in .env.`);
+      process.exit(1);
+    } else {
+      logger.error(`❌ Server error: ${err.message}`);
+      process.exit(1);
+    }
+  });
 }
 
 // ── Graceful Shutdown ───────────────────────────────────────

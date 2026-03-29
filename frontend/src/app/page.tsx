@@ -116,16 +116,6 @@ export default function LandingPage() {
             }} />
             Live System
           </span>
-          <Link href="/dashboard" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '7px 16px', borderRadius: 7,
-            background: '#3b82f6', color: '#fff',
-            fontWeight: 600, fontSize: '0.825rem',
-            textDecoration: 'none',
-            transition: 'background 120ms',
-          }}>
-            Open Dashboard →
-          </Link>
         </div>
       </nav>
 

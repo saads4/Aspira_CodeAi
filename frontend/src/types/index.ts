@@ -3,7 +3,7 @@
 // and the API response shapes from all route handlers.
 
 // ─── Sample ──────────────────────────────────────────────────────────────────
-export type SampleStatus = 'pending' | 'processing' | 'assigned' | 'delayed' | 'error';
+export type SampleStatus = 'pending' | 'processing' | 'assigned' | 'delayed' | 'completed' | 'error';
 
 export interface Sample {
   _id: string;
@@ -32,6 +32,12 @@ export interface Sample {
   missed_batch: boolean;
   delay_reason: string;
 
+  // Result completion
+  result_ready_at: string;
+  actual_tat_minutes: number;
+  completed_within_sla: boolean;
+  prediction_error_minutes: number;
+
   // Status
   status: SampleStatus;
   processed: boolean;
@@ -42,7 +48,7 @@ export interface Sample {
 }
 
 // ─── Alert ───────────────────────────────────────────────────────────────────
-export type AlertType = 'MISSED_BATCH' | 'SLA_BREACH' | 'DELAY_ESCALATION';
+export type AlertType = 'MISSED_BATCH' | 'SLA_BREACH' | 'DELAY_ESCALATION' | 'RESULT_COMPLETED';
 
 export interface AlertData {
   sample_id: string;
@@ -91,6 +97,7 @@ export interface StatsCount {
   breached: number;
   error: number;
   missed_batch: number;
+  completed: number;
 }
 
 export interface RecentBreach {
@@ -110,8 +117,16 @@ export interface RecentMissed {
   updated_at: string;
 }
 
+export interface ResultMetrics {
+  avg_actual_tat: number | null;
+  sla_compliance_rate: number | null;
+  avg_prediction_error: number | null;
+  total_completed: number;
+}
+
 export interface Stats {
   counts: StatsCount;
+  result_metrics: ResultMetrics;
   recent_breaches: RecentBreach[];
   recent_missed: RecentMissed[];
 }
@@ -120,6 +135,7 @@ export interface AlertSummary {
   MISSED_BATCH?: number;
   SLA_BREACH?: number;
   DELAY_ESCALATION?: number;
+  RESULT_COMPLETED?: number;
 }
 
 // ─── API Response Wrappers ───────────────────────────────────────────────────
@@ -156,6 +172,7 @@ export interface SampleFilters {
 
 export interface AlertFilters {
   type?: AlertType | '';
+  sample_id?: string;
   acknowledged?: boolean | null;
   page: number;
   limit: number;
@@ -190,4 +207,5 @@ export interface ScanPayload {
   method?: string;
   specimen_type?: string;
   test_id?: string;
+  test_code?: string;
 }

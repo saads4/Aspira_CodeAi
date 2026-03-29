@@ -1,6 +1,5 @@
 'use client';
-import { RefreshCw, ScanLine } from 'lucide-react';
-import { useUIStore } from '@/store/slices/uiSlice';
+import { RefreshCw } from 'lucide-react';
 import ConnectionBadge from '@/components/ui/ConnectionBadge';
 
 interface TopbarProps {
@@ -10,8 +9,6 @@ interface TopbarProps {
 }
 
 export default function Topbar({ title, onRefresh, refreshing }: TopbarProps) {
-  const setScanOpen = useUIStore((s) => s.setScanDrawerOpen);
-
   return (
     <header className="topbar">
       <h1 className="topbar-title">{title}</h1>
@@ -33,15 +30,6 @@ export default function Topbar({ title, onRefresh, refreshing }: TopbarProps) {
             Refresh
           </button>
         )}
-
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => setScanOpen(true)}
-          id="scan-submit-btn"
-        >
-          <ScanLine size={14} />
-          Scan
-        </button>
       </div>
 
       <style>{`
