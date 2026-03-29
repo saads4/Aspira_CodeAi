@@ -3,7 +3,7 @@
 // and the API response shapes from all route handlers.
 
 // ─── Sample ──────────────────────────────────────────────────────────────────
-export type SampleStatus = 'pending' | 'processing' | 'assigned' | 'delayed' | 'error';
+export type SampleStatus = 'pending' | 'processing' | 'assigned' | 'delayed' | 'completed' | 'error';
 
 export interface Sample {
   _id: string;
@@ -91,6 +91,7 @@ export interface StatsCount {
   breached: number;
   error: number;
   missed_batch: number;
+  completed: number;
 }
 
 export interface RecentBreach {

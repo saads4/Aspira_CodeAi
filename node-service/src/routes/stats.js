@@ -9,17 +9,17 @@ const router = express.Router();
 router.get('/', async (req, res, next) => {
   try {
     const [
-      totalCount,
-      pendingCount,
-      assignedCount,
-      delayedCount,
-      breachedCount,
-      errorCount,
-      missedBatchCount,
-      completedCount,
-      recentBreaches,
-      recentMissed,
-      resultMetrics,
+      total,
+      pending,
+      assigned,
+      delayed,
+      breached,
+      error,
+      missed_batch,
+      completed,
+      recent_breaches,
+      recent_missed,
+      result_metrics,
     ] = await Promise.all([
       Sample.countDocuments(),
       Sample.countDocuments({ status: 'pending' }),
@@ -55,23 +55,25 @@ router.get('/', async (req, res, next) => {
     ]);
 
     // Extract result metrics (aggregation returns an array)
-    const rm = resultMetrics[0] || {};
+    const rm = result_metrics[0] || {};
     const sla_compliance_rate = rm.total_completed
       ? Math.round((rm.within_sla_count / rm.total_completed) * 10000) / 100
       : null;
+
+    console.log(`STATS API: completed=${completed}, total=${total}, breached=${breached}`);
 
     res.json({
       status: 'ok',
       data: {
         counts: {
-          total: totalCount,
-          pending: pendingCount,
-          assigned: assignedCount,
-          delayed: delayedCount,
-          breached: breachedCount,
-          completed: completedCount,
-          error: errorCount,
-          missed_batch: missedBatchCount,
+          total,
+          pending,
+          assigned,
+          delayed,
+          breached,
+          completed,
+          error,
+          missed_batch,
         },
         result_metrics: {
           avg_actual_tat:       rm.avg_actual_tat != null ? Math.round(rm.avg_actual_tat * 100) / 100 : null,
@@ -79,8 +81,8 @@ router.get('/', async (req, res, next) => {
           avg_prediction_error: rm.avg_prediction_error != null ? Math.round(rm.avg_prediction_error * 100) / 100 : null,
           total_completed:      rm.total_completed || 0,
         },
-        recent_breaches: recentBreaches,
-        recent_missed: recentMissed,
+        recent_breaches,
+        recent_missed,
       },
     });
   } catch (err) {

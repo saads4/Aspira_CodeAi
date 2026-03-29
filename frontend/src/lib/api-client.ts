@@ -26,10 +26,7 @@ interface RequestOptions extends RequestInit {
 
 // In the browser: use relative URLs so Next.js rewrites proxy to the backend.
 // In SSR: use the full URL from env.
-const BASE_URL =
-  typeof window === 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000')
-    : '';
+const BASE_URL = "http://localhost:5000";
 
 // In-flight request deduplication map (GET only)
 const inflight = new Map<string, Promise<Response>>();
@@ -107,18 +104,21 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ApiError(0, 'NETWORK_ERROR', `Network error: ${(err as Error).message}`);
   }
 
+  // Parse response body once
+  let data: any;
+
+  try {
+    data = await response.json();
+  } catch (err) {
+    throw new ApiError(response.status, 'PARSE_ERROR', 'Failed to parse JSON response');
+  }
+
   if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      const body = await response.json();
-      message = body?.message ?? message;
-    } catch {
-      // ignore parse failure
-    }
+    const message = data?.message || `HTTP ${response.status}`;
     throw new ApiError(response.status, 'API_ERROR', message);
   }
 
-  return response.json() as Promise<T>;
+  return data as T;
 }
 
 // ─── Typed API methods ──────────────────────────────────────────────────────

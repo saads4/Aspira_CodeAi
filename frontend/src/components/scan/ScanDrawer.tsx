@@ -18,7 +18,11 @@ const DEFAULTS: ScanPayload = {
 };
 
 export default function ScanDrawer() {
-  const close = useUIStore((s) => s.setScanDrawerOpen);
+  const { scanDrawerOpen, setScanDrawerOpen } = useUIStore();
+
+  if (!scanDrawerOpen) return null;
+
+  const close = setScanDrawerOpen;
   const [form, setForm] = useState<ScanPayload>(DEFAULTS);
   const [loading, setLoading] = useState(false);
   const [lastResult, setLastResult] = useState<{ count: number; ids: string[] } | null>(null);

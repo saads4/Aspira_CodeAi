@@ -88,6 +88,21 @@ export const webhookService = {
   },
 };
 
+// ─── Result Service ───────────────────────────────────────────────────────────
+
+export const resultService = {
+  submit(payload: {
+    sample_id: string;
+    test_name: string;
+    result_ready_at: string;
+  }) {
+    return apiClient.post<{
+      status: string;
+      message: string;
+    }>('/webhook/result', payload);
+  },
+};
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 export const healthService = {

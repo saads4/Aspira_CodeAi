@@ -121,6 +121,7 @@ export default function DashboardPage() {
               <option value="processing">Processing</option>
               <option value="assigned">Assigned</option>
               <option value="delayed">Delayed</option>
+              <option value="completed">Completed</option>
               <option value="error">Error</option>
             </select>
             <select

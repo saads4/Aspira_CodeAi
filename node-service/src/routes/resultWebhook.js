@@ -38,6 +38,7 @@ function validateResultPayload(body) {
 }
 
 router.post('/', async (req, res, next) => {
+  console.log('RESULT WEBHOOK: Received request:', req.body);
   try {
     const body = req.body;
 

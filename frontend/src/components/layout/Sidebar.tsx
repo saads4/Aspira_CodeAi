@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity, LayoutDashboard, AlertTriangle, Package,
-  ScanLine, ChevronLeft, ChevronRight,
+  ScanLine, ChevronLeft, ChevronRight, CheckCircle,
 } from 'lucide-react';
 import { useUIStore } from '@/store/slices/uiSlice';
 import { useAlertsStore } from '@/store/slices/alertsSlice';
@@ -13,6 +13,7 @@ const NAV = [
   { href: '/dashboard/batches',    icon: Package,         label: 'Batches' },
   { href: '/dashboard/exceptions', icon: AlertTriangle,   label: 'Exceptions', badge: true },
   { href: '/dashboard/scan',       icon: ScanLine,        label: 'Scan / Submit' },
+  { href: '/dashboard/result',     icon: CheckCircle,     label: 'Complete / Result Entry' },
 ];
 
 export default function Sidebar() {
